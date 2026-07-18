@@ -42,18 +42,25 @@ class AuthNotifier extends _$AuthNotifier {
     logout();
   }
 
-  Future<void> login(String username, String password, String odooUrl) async {
+  Future<void> login(
+    String username,
+    String password,
+    String odooUrl,
+    String database,
+  ) async {
     try {
       final authentication = await _authRepository.login(
         username,
         password,
         odooUrl,
+        database,
       );
 
       Logger.info(authentication.name);
 
       // * Guardar credenciales locales
       await _storage.setKeyValue('odooUrl', odooUrl);
+      await _storage.setKeyValue('odooDatabase', database);
 
       _setLoggedUser(authentication);
     } on CustomError catch (e) {
@@ -84,7 +91,7 @@ class AuthNotifier extends _$AuthNotifier {
       Logger.error(
         "Error al solicitar restablecimiento de contraseña: ${e.message}",
       );
-      throw e;
+      rethrow;
     } catch (_) {
       Logger.error(
         "Error inesperado al solicitar restablecimiento de contraseña.",
@@ -108,6 +115,13 @@ class AuthNotifier extends _$AuthNotifier {
 
   void clearError() {
     state = state.copyWith(errorMessage: '');
+  }
+
+  void setError(String message) {
+    state = state.copyWith(
+      authStatus: AuthStatus.unauthenticated,
+      errorMessage: message,
+    );
   }
 }
 

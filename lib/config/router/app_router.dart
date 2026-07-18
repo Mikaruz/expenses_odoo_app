@@ -12,7 +12,7 @@ GoRouter appRouter(Ref ref) {
   final notifier = ref.watch(goRouterProvider);
 
   return GoRouter(
-    initialLocation: '/home',
+    initialLocation: '/splash',
     refreshListenable: notifier,
     routes: [
       GoRoute(
@@ -44,18 +44,18 @@ GoRouter appRouter(Ref ref) {
       final AuthStatus authStatus = notifier.authStatus;
       final isGoingTo = state.uri.toString();
 
-      if (isGoingTo == '/splash' && authStatus == AuthStatus.checking) {
-        return null;
+      if (authStatus == AuthStatus.checking) {
+        return isGoingTo == '/splash' ? null : '/splash';
       }
 
       if (authStatus == AuthStatus.unauthenticated) {
-        final publicRoutes = ['/login', '/forget-password', '/home', '/expense-detail', '/expense-form'];
+        final publicRoutes = ['/login', '/forget-password'];
         return publicRoutes.contains(isGoingTo) ? null : '/login';
       }
 
       if (authStatus == AuthStatus.authenticated) {
         if (['/login', '/splash'].contains(isGoingTo)) {
-          return '/';
+          return '/home';
         }
       }
 

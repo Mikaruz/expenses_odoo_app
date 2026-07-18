@@ -15,7 +15,7 @@ class LoginFormNotifier extends _$LoginFormNotifier {
 
     state = state.copyWith(
       email: email,
-      isValid: Formz.validate([email, state.password, state.odooUrl]),
+      isValid: Formz.validate([email, state.password]),
     );
   }
 
@@ -24,7 +24,7 @@ class LoginFormNotifier extends _$LoginFormNotifier {
 
     state = state.copyWith(
       password: password,
-      isValid: Formz.validate([state.email, password, state.odooUrl]),
+      isValid: Formz.validate([state.email, password]),
     );
   }
 
@@ -33,21 +33,19 @@ class LoginFormNotifier extends _$LoginFormNotifier {
 
     state = state.copyWith(
       odooUrl: odooUrl,
-      isValid: Formz.validate([state.email, state.password, odooUrl]),
+      isValid: Formz.validate([state.email, state.password]),
     );
   }
 
   Future<void> submit() async {
     final email = Email.dirty(state.email.value);
     final password = Password.dirty(state.password.value);
-    final odooUrl = Url.dirty(state.odooUrl.value);
 
     state = state.copyWith(
       email: email,
       password: password,
-      odooUrl: odooUrl,
       isFormPosted: true,
-      isValid: Formz.validate([email, password, odooUrl]),
+      isValid: Formz.validate([email, password]),
       isLoading: true,
     );
 
@@ -58,8 +56,26 @@ class LoginFormNotifier extends _$LoginFormNotifier {
     }
 
     final auth = ref.read(authProvider.notifier);
+    final storage = KeyValueStorageServiceImpl();
+    final odooUrl = await storage.getValue<String>('odooUrl');
+    final database = await storage.getValue<String>('odooDatabase');
 
-    await auth.login(email.value, password.value, odooUrl.value);
+    final configuredUrl = Url.dirty(odooUrl ?? '');
+    if (!configuredUrl.isValid || database == null || database.trim().isEmpty) {
+      auth.setError(
+        'Configura el servidor Odoo y la base de datos antes de iniciar sesión.',
+      );
+      state = state.copyWith(isLoading: false);
+
+      return;
+    }
+
+    await auth.login(
+      email.value,
+      password.value,
+      configuredUrl.value.trim(),
+      database.trim(),
+    );
 
     state = state.copyWith(isLoading: false);
   }

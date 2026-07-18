@@ -30,7 +30,9 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
     final result = ocrState.result;
 
     _rucController = TextEditingController(text: result?.ruc ?? '');
-    _businessNameController = TextEditingController(text: result?.businessName ?? '');
+    _businessNameController = TextEditingController(
+      text: result?.businessName ?? '',
+    );
     _typeController = TextEditingController(text: result?.type ?? '');
     _dateController = TextEditingController(text: result?.date ?? '');
     _serialController = TextEditingController(text: result?.serialNumber ?? '');
@@ -68,7 +70,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
     showDialog(
       context: context,
       builder: (_) => Dialog(
-        backgroundColor: Colors.transparent,
+        backgroundColor: Colors.black,
         insetPadding: EdgeInsets.zero,
         child: Stack(
           children: [
@@ -77,10 +79,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
               minScale: 0.5,
               maxScale: 4,
               child: Center(
-                child: Image.file(
-                  File(imagePath),
-                  fit: BoxFit.contain,
-                ),
+                child: Image.file(File(imagePath), fit: BoxFit.contain),
               ),
             ),
             Positioned(
@@ -108,48 +107,52 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
           _typeController.text = result.type;
           _dateController.text = result.date;
           _serialController.text = result.serialNumber;
-          _igvController.text = result.igv > 0 ? result.igv.toStringAsFixed(2) : '';
-          _totalController.text = result.total > 0 ? result.total.toStringAsFixed(2) : '';
+          _igvController.text = result.igv > 0
+              ? result.igv.toStringAsFixed(2)
+              : '';
+          _totalController.text = result.total > 0
+              ? result.total.toStringAsFixed(2)
+              : '';
         }
       }
     });
 
     final ocrState = ref.watch(ocrProvider);
-    
+
     if (ocrState.isLoading) {
       return Scaffold(
-        backgroundColor: Colors.grey.shade50,
+        backgroundColor: paperColor,
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              CircularProgressIndicator(color: mainColor),
+              const CircularProgressIndicator(color: mainColor),
               const SizedBox(height: 24),
               const Text(
-                'Analizando comprobante...',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                'Leyendo comprobante',
+                style: TextStyle(
+                  color: inkColor,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.3,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Buscando RUC, serie, IGV y total...',
+                style: TextStyle(color: mutedInkColor),
               ),
             ],
           ),
         ),
       );
     }
-    
+
     return Scaffold(
-      backgroundColor: Colors.grey.shade50,
-      appBar: AppBar(
-        title: const Text('Registrar Gasto'),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.black87),
-        titleTextStyle: const TextStyle(
-          color: Colors.black87,
-          fontSize: 18,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
+      backgroundColor: paperColor,
+      appBar: AppBar(title: const Text('Registrar gasto')),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
         child: Form(
           key: _formKey,
           child: Column(
@@ -160,13 +163,18 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
                   padding: const EdgeInsets.all(12),
                   margin: const EdgeInsets.only(bottom: 20),
                   decoration: BoxDecoration(
-                    color: const Color.fromARGB(255, 253, 237, 237),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.red.shade200),
+                    color: dangerColor.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: dangerColor.withValues(alpha: 0.22),
+                    ),
                   ),
                   child: Text(
                     ocrState.error!,
-                    style: TextStyle(color: Colors.red.shade800),
+                    style: const TextStyle(
+                      color: dangerColor,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
 
@@ -174,21 +182,21 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
                 GestureDetector(
                   onTap: () => _showFullScreenImage(ocrState.imagePath!),
                   child: Container(
-                    margin: const EdgeInsets.only(bottom: 24),
-                    height: 180,
+                    margin: const EdgeInsets.only(bottom: 18),
+                    height: 204,
                     decoration: BoxDecoration(
-                      color: Colors.black12,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.grey.shade300),
+                      color: inkColor,
+                      borderRadius: BorderRadius.circular(26),
+                      border: Border.all(color: lineColor),
                       image: DecorationImage(
                         image: FileImage(File(ocrState.imagePath!)),
                         fit: BoxFit.cover,
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
+                          color: inkColor.withValues(alpha: 0.10),
+                          blurRadius: 24,
+                          offset: const Offset(0, 12),
                         ),
                       ],
                     ),
@@ -198,17 +206,21 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
                         margin: const EdgeInsets.all(8),
                         padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
-                          color: Colors.black54,
-                          borderRadius: BorderRadius.circular(8),
+                          color: inkColor.withValues(alpha: 0.78),
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Icon(Icons.fullscreen, color: Colors.white, size: 20),
+                        child: const Icon(
+                          Icons.fullscreen,
+                          color: Colors.white,
+                          size: 20,
+                        ),
                       ),
                     ),
                   ),
                 ),
 
               _buildSection(
-                title: 'Información del Comercio',
+                title: 'Comercio',
                 children: [
                   _buildTextField(
                     controller: _rucController,
@@ -226,7 +238,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
               const SizedBox(height: 20),
 
               _buildSection(
-                title: 'Detalles del Comprobante',
+                title: 'Comprobante',
                 children: [
                   _buildTextField(
                     controller: _typeController,
@@ -252,36 +264,28 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
               _buildSection(
                 title: 'Montos',
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildTextField(
-                          controller: _igvController,
-                          label: 'IGV',
-                          icon: Icons.account_balance_wallet_outlined,
-                          prefixText: 'S/ ',
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: _buildTextField(
-                          controller: _totalController,
-                          label: 'Total',
-                          icon: Icons.monetization_on_outlined,
-                          prefixText: 'S/ ',
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                          validator: (value) {
-                            if (value == null || value.isEmpty) return 'Requerido';
-                            return null;
-                          },
-                        ),
-                      ),
-                    ],
+                  _buildTextField(
+                    controller: _totalController,
+                    label: 'Total',
+                    icon: Icons.monetization_on_outlined,
+                    prefixText: 'S/ ',
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) return 'Requerido';
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  _buildTextField(
+                    controller: _igvController,
+                    label: 'IGV',
+                    icon: Icons.account_balance_wallet_outlined,
+                    prefixText: 'S/ ',
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                   ),
                 ],
               ),
@@ -290,20 +294,17 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
               ElevatedButton(
                 onPressed: _saveExpense,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: mainColor,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  backgroundColor: inkColor,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 17),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(16),
                   ),
-                  elevation: 2,
+                  elevation: 0,
                 ),
                 child: const Text(
-                  'Guardar Gasto',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
+                  'Guardar gasto',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
                 ),
               ),
               const SizedBox(height: 24),
@@ -320,16 +321,16 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        color: surfaceColor,
+        borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
+            color: inkColor.withValues(alpha: 0.05),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
           ),
         ],
-        border: Border.all(color: Colors.grey.shade100),
+        border: Border.all(color: lineColor.withValues(alpha: 0.75)),
       ),
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -338,9 +339,10 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
           Text(
             title,
             style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
+              fontSize: 17,
+              fontWeight: FontWeight.w800,
+              color: inkColor,
+              letterSpacing: -0.2,
             ),
           ),
           const SizedBox(height: 20),
@@ -364,27 +366,27 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
       validator: validator,
       decoration: InputDecoration(
         labelText: label,
-        prefixIcon: Icon(icon, color: Colors.grey.shade600),
+        prefixIcon: Icon(icon, color: mutedInkColor),
         prefixText: prefixText,
         prefixStyle: const TextStyle(
-          color: Colors.black87, 
+          color: inkColor,
           fontWeight: FontWeight.w500,
           fontSize: 16,
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300),
+          borderSide: const BorderSide(color: lineColor),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300),
+          borderSide: const BorderSide(color: lineColor),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: mainColor),
         ),
         filled: true,
-        fillColor: Colors.grey.shade50,
+        fillColor: receiptColor,
       ),
     );
   }

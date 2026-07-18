@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:oh_expenses_app/config/config.dart';
 
 class CustomTextField extends StatefulWidget {
   final String label;
@@ -33,8 +34,6 @@ class _CustomTextFieldState extends State<CustomTextField> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
     return TextField(
       controller: widget.controller,
       focusNode: widget.focusNode,
@@ -48,60 +47,52 @@ class _CustomTextFieldState extends State<CustomTextField> {
             ? Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    widget.icon,
-                    size: 18,
-                    color: colorScheme.onSurfaceVariant,
-                  ),
+                  Icon(widget.icon, size: 18, color: mutedInkColor),
                   const SizedBox(width: 6),
                   Text(widget.label),
                 ],
               )
             : Text(widget.label),
-        labelStyle: TextStyle(
+        labelStyle: const TextStyle(
           fontSize: 14,
-          fontWeight: FontWeight.w400,
-          letterSpacing: 0.3,
-          color: colorScheme.onSurfaceVariant,
+          fontWeight: FontWeight.w500,
+          letterSpacing: 0.1,
+          color: mutedInkColor,
         ),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(
-            color: colorScheme.outline.withValues(alpha: 0.4),
-            width: 1,
-          ),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: lineColor),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(
-            color: colorScheme.outline.withValues(alpha: 0.35),
-            width: 1,
-          ),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: lineColor),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: colorScheme.primary, width: 1.4),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: mainColor, width: 1.4),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: colorScheme.error, width: 1),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: dangerColor),
         ),
         focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: colorScheme.error, width: 1.4),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: dangerColor, width: 1.4),
         ),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
           vertical: 18,
         ),
         errorText: widget.errorText,
+        filled: true,
+        fillColor: receiptColor,
         suffixIcon: widget.isPassword
             ? IconButton(
                 icon: Icon(
                   _obscureText
                       ? Icons.visibility_off_outlined
                       : Icons.visibility_outlined,
-                  color: colorScheme.onSurfaceVariant,
+                  color: mutedInkColor,
                 ),
                 onPressed: () {
                   setState(() => _obscureText = !_obscureText);

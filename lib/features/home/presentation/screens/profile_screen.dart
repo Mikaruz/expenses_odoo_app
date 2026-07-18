@@ -8,28 +8,47 @@ class ProfileScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final authState = ref.watch(authProvider);
-    final user = authState.user ?? 'Usuario';
-
     return Scaffold(
-      appBar: AppBar(title: const Text('Mi Perfil'), centerTitle: true),
+      backgroundColor: paperColor,
+      appBar: AppBar(title: const Text('Mi perfil')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
         child: Column(
           children: [
-            const CircleAvatar(
-              radius: 50,
-              backgroundImage: NetworkImage('https://i.pravatar.cc/150?img=12'),
+            Container(
+              width: 96,
+              height: 96,
+              decoration: BoxDecoration(
+                color: inkColor,
+                borderRadius: BorderRadius.circular(30),
+                boxShadow: [
+                  BoxShadow(
+                    color: inkColor.withValues(alpha: 0.10),
+                    blurRadius: 24,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.person_outline_rounded,
+                color: Colors.white,
+                size: 44,
+              ),
             ),
             const SizedBox(height: 16),
             Text(
               'Usuario',
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w800,
+                color: inkColor,
+                letterSpacing: -0.5,
+              ),
             ),
             const SizedBox(height: 8),
             Text(
               'usuario@correo.com',
-              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+              style: const TextStyle(fontSize: 14, color: mutedInkColor),
             ),
             const SizedBox(height: 40),
             _ProfileOption(
@@ -55,12 +74,12 @@ class ProfileScreen extends ConsumerWidget {
                   ref.read(authProvider.notifier).logout();
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red[50],
-                  foregroundColor: Colors.red,
+                  backgroundColor: dangerColor.withValues(alpha: 0.10),
+                  foregroundColor: dangerColor,
                   elevation: 0,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(16),
                   ),
                 ),
                 icon: const Icon(Icons.logout),
@@ -87,22 +106,34 @@ class _ProfileOption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      leading: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: Colors.grey[100],
-          borderRadius: BorderRadius.circular(8),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: surfaceColor,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: lineColor),
+      ),
+      child: ListTile(
+        leading: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: mainColor.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, color: mainColor),
         ),
-        child: Icon(icon, color: Colors.black87),
+        title: Text(
+          title,
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: inkColor,
+          ),
+        ),
+        trailing: const Icon(Icons.chevron_right, color: mutedInkColor),
+        onTap: onTap,
+        contentPadding: const EdgeInsets.symmetric(vertical: 4),
       ),
-      title: Text(
-        title,
-        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-      ),
-      trailing: const Icon(Icons.chevron_right, color: Colors.grey),
-      onTap: onTap,
-      contentPadding: const EdgeInsets.symmetric(vertical: 4),
     );
   }
 }

@@ -20,11 +20,11 @@ class ExpenseDetailScreen extends StatelessWidget {
   Color _getStatusColor() {
     switch (status) {
       case ExpenseStatus.pending:
-        return Colors.orange;
+        return warningColor;
       case ExpenseStatus.approved:
-        return Colors.green;
+        return successColor;
       case ExpenseStatus.rejected:
-        return Colors.red;
+        return dangerColor;
     }
   }
 
@@ -35,26 +35,15 @@ class ExpenseDetailScreen extends StatelessWidget {
       case ExpenseStatus.approved:
         return 'Aprobado';
       case ExpenseStatus.rejected:
-        return 'Rechazado';
+        return 'Observado';
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: const Text('Detalle de Gasto'),
-        centerTitle: true,
-        backgroundColor: Colors.white,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.black87),
-        titleTextStyle: const TextStyle(
-          color: Colors.black87,
-          fontSize: 18,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
+      backgroundColor: paperColor,
+      appBar: AppBar(title: const Text('Detalle de gasto')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
         child: Column(
@@ -65,10 +54,15 @@ class ExpenseDetailScreen extends StatelessWidget {
                 width: 80,
                 height: 80,
                 decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  shape: BoxShape.circle,
+                  color: receiptColor,
+                  borderRadius: BorderRadius.circular(26),
+                  border: Border.all(color: lineColor),
                 ),
-                child: Icon(Icons.receipt_long, color: mainColor, size: 40),
+                child: const Icon(
+                  Icons.receipt_long_outlined,
+                  color: mainColor,
+                  size: 40,
+                ),
               ),
             ),
             const SizedBox(height: 24),
@@ -77,16 +71,21 @@ class ExpenseDetailScreen extends StatelessWidget {
                 'S/ ${amount.toStringAsFixed(2)}',
                 style: const TextStyle(
                   fontSize: 32,
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w800,
+                  color: inkColor,
+                  letterSpacing: -0.8,
                 ),
               ),
             ),
             const SizedBox(height: 8),
             Center(
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
-                  color: _getStatusColor().withOpacity(0.1),
+                  color: _getStatusColor().withValues(alpha: 0.10),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
@@ -101,21 +100,25 @@ class ExpenseDetailScreen extends StatelessWidget {
             ),
             const SizedBox(height: 40),
             _DetailRow(label: 'Título', value: title),
-            const Divider(height: 32),
+            const Divider(height: 32, color: lineColor),
             _DetailRow(label: 'Fecha', value: date),
-            const Divider(height: 32),
-            _DetailRow(label: 'Categoría', value: 'Alimentación'), // Dato mockeado
-            const Divider(height: 32),
+            const Divider(height: 32, color: lineColor),
+            _DetailRow(
+              label: 'Categoría',
+              value: 'Alimentación',
+            ), // Dato mockeado
+            const Divider(height: 32, color: lineColor),
             const _DetailRow(
-              label: 'Descripción', 
-              value: 'Almuerzo con el cliente de la cuenta principal para discutir el nuevo proyecto.',
+              label: 'Descripción',
+              value:
+                  'Almuerzo con el cliente de la cuenta principal para discutir el nuevo proyecto.',
             ),
-            const Divider(height: 32),
+            const Divider(height: 32, color: lineColor),
             const Text(
               'Comprobante',
               style: TextStyle(
                 fontSize: 14,
-                color: Colors.grey,
+                color: mutedInkColor,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -124,17 +127,20 @@ class ExpenseDetailScreen extends StatelessWidget {
               width: double.infinity,
               height: 200,
               decoration: BoxDecoration(
-                color: Colors.grey[100],
+                color: receiptColor,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.grey.shade300),
+                border: Border.all(color: lineColor),
               ),
               child: const Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.image, size: 48, color: Colors.grey),
+                    Icon(Icons.image_outlined, size: 48, color: mutedInkColor),
                     SizedBox(height: 8),
-                    Text('Imagen del comprobante', style: TextStyle(color: Colors.grey)),
+                    Text(
+                      'Imagen del comprobante',
+                      style: TextStyle(color: mutedInkColor),
+                    ),
                   ],
                 ),
               ),
@@ -150,10 +156,7 @@ class _DetailRow extends StatelessWidget {
   final String label;
   final String value;
 
-  const _DetailRow({
-    required this.label,
-    required this.value,
-  });
+  const _DetailRow({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -166,7 +169,7 @@ class _DetailRow extends StatelessWidget {
             label,
             style: const TextStyle(
               fontSize: 14,
-              color: Colors.grey,
+              color: mutedInkColor,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -177,7 +180,7 @@ class _DetailRow extends StatelessWidget {
             style: const TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w500,
-              color: Colors.black87,
+              color: inkColor,
             ),
             textAlign: TextAlign.right,
           ),

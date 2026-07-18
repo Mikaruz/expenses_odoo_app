@@ -10,8 +10,9 @@ class AuthRepositoryImpl extends AuthRepository {
     String username,
     String password,
     String odooUrl,
+    String database,
   ) {
-    return _datasource.login(username, password, odooUrl);
+    return _datasource.login(username, password, odooUrl, database);
   }
 
   @override

@@ -10,19 +10,51 @@ class AuthDatasourceImpl extends AuthDatasource {
     String username,
     String password,
     String odooUrl,
+    String database,
   ) async {
     try {
-      final dio = Dio(BaseOptions(baseUrl: odooUrl));
-
-      final database = 'o18-jarusa-5-ene';
-
-      final response = await dio.post(
-        '/oh-expenses/api/auth/login',
-        options: Options(headers: {'Content-Type': 'application/json'}),
-        data: {'db': database, 'login': username, 'password': password},
+      final dio = Dio(
+        BaseOptions(
+          baseUrl: odooUrl.trim(),
+          connectTimeout: const Duration(seconds: 15),
+          receiveTimeout: const Duration(seconds: 20),
+          sendTimeout: const Duration(seconds: 15),
+        ),
       );
 
-      Logger.info('Login response: ${response.data}');
+      final response = await dio.post(
+        '/web/session/authenticate',
+        options: Options(headers: {'Content-Type': 'application/json'}),
+        data: {
+          'jsonrpc': '2.0',
+          'method': 'call',
+          'params': {
+            'db': database.trim(),
+            'login': username.trim(),
+            'password': password,
+          },
+          'id': DateTime.now().millisecondsSinceEpoch,
+        },
+      );
+
+      final data = response.data;
+      if (data is! Map<String, dynamic>) {
+        throw CustomError('Respuesta inválida del servidor Odoo.');
+      }
+
+      final error = data['error'];
+      if (error != null) {
+        final errorData = error is Map<String, dynamic> ? error['data'] : null;
+        final message = errorData is Map<String, dynamic>
+            ? errorData['message']
+            : null;
+
+        throw CustomError(
+          message?.toString().isNotEmpty == true
+              ? message.toString()
+              : 'No se pudo iniciar sesión en Odoo.',
+        );
+      }
 
       final authentication = AuthenticationMapper.jsonToEntity(response);
 

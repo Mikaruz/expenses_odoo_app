@@ -9,15 +9,40 @@ class ExpenseList extends StatelessWidget {
   Widget build(BuildContext context) {
     // Mock data
     final expenses = [
-      (title: 'Almuerzo Cliente', date: '12 Feb 2026', amount: 150.00, status: ExpenseStatus.pending),
-      (title: 'Transporte Taxi', date: '11 Feb 2026', amount: 25.50, status: ExpenseStatus.approved),
-      (title: 'Materiales Oficina', date: '10 Feb 2026', amount: 320.00, status: ExpenseStatus.approved),
-      (title: 'Cena Equipo', date: '09 Feb 2026', amount: 450.00, status: ExpenseStatus.rejected),
-       (title: 'Taxi Aeropuerto', date: '08 Feb 2026', amount: 60.00, status: ExpenseStatus.pending),
+      (
+        title: 'Almuerzo Cliente',
+        date: '12 Feb 2026',
+        amount: 150.00,
+        status: ExpenseStatus.pending,
+      ),
+      (
+        title: 'Transporte Taxi',
+        date: '11 Feb 2026',
+        amount: 25.50,
+        status: ExpenseStatus.approved,
+      ),
+      (
+        title: 'Materiales Oficina',
+        date: '10 Feb 2026',
+        amount: 320.00,
+        status: ExpenseStatus.approved,
+      ),
+      (
+        title: 'Cena Equipo',
+        date: '09 Feb 2026',
+        amount: 450.00,
+        status: ExpenseStatus.rejected,
+      ),
+      (
+        title: 'Taxi Aeropuerto',
+        date: '08 Feb 2026',
+        amount: 60.00,
+        status: ExpenseStatus.pending,
+      ),
     ];
 
     return ListView.builder(
-      padding: const EdgeInsets.only(top: 8, bottom: 80), // bottom padding for FAB
+      padding: const EdgeInsets.only(top: 8, bottom: 96),
       physics: const NeverScrollableScrollPhysics(),
       shrinkWrap: true,
       itemCount: expenses.length,

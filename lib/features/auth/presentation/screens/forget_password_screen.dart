@@ -11,7 +11,7 @@ class ForgetPasswordScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       resizeToAvoidBottomInset: true,
-      backgroundColor: Colors.white,
+      backgroundColor: paperColor,
       body: SingleChildScrollView(
         physics: const ClampingScrollPhysics(),
         child: Column(
@@ -23,7 +23,7 @@ class ForgetPasswordScreen extends StatelessWidget {
               child: SafeArea(
                 child: Text(
                   'Powered By BYR / EYM',
-                  style: TextStyle(color: Colors.grey),
+                  style: TextStyle(color: mutedInkColor),
                 ),
               ),
             ),
@@ -61,7 +61,7 @@ class _ForgetPasswordFormState extends ConsumerState<_ForgetPasswordForm> {
           child: Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: surfaceColor,
               borderRadius: BorderRadius.circular(24),
               boxShadow: [
                 BoxShadow(
@@ -79,13 +79,13 @@ class _ForgetPasswordFormState extends ConsumerState<_ForgetPasswordForm> {
                   width: 80,
                   height: 80,
                   decoration: BoxDecoration(
-                    color: Colors.green.shade50,
+                    color: successColor.withValues(alpha: 0.10),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
                     Icons.mark_email_read_rounded,
                     size: 48,
-                    color: Colors.green.shade600,
+                    color: successColor,
                   ),
                 ),
                 const SizedBox(height: 24),
@@ -95,7 +95,7 @@ class _ForgetPasswordFormState extends ConsumerState<_ForgetPasswordForm> {
                   style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
-                    color: Colors.grey.shade800,
+                    color: inkColor,
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -105,7 +105,7 @@ class _ForgetPasswordFormState extends ConsumerState<_ForgetPasswordForm> {
                   'Se ha enviado un correo electrónico con las instrucciones para restablecer tu contraseña.',
                   style: TextStyle(
                     fontSize: 15,
-                    color: Colors.grey.shade600,
+                    color: mutedInkColor,
                     height: 1.4,
                   ),
                   textAlign: TextAlign.center,
@@ -115,7 +115,7 @@ class _ForgetPasswordFormState extends ConsumerState<_ForgetPasswordForm> {
                   'Por favor, revisa tu bandeja de entrada.',
                   style: TextStyle(
                     fontSize: 14,
-                    color: Colors.grey.shade500,
+                    color: mutedInkColor,
                     fontStyle: FontStyle.italic,
                   ),
                   textAlign: TextAlign.center,
@@ -132,7 +132,7 @@ class _ForgetPasswordFormState extends ConsumerState<_ForgetPasswordForm> {
                       }
                     },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green.shade600,
+                      backgroundColor: successColor,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
@@ -172,7 +172,7 @@ class _ForgetPasswordFormState extends ConsumerState<_ForgetPasswordForm> {
             ),
           ],
         ),
-        backgroundColor: Colors.red.shade600,
+        backgroundColor: dangerColor,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.all(16),
@@ -207,7 +207,7 @@ class _ForgetPasswordFormState extends ConsumerState<_ForgetPasswordForm> {
     });
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

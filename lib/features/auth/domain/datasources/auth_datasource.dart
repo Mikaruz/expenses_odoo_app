@@ -5,6 +5,7 @@ abstract class AuthDatasource {
     String username,
     String password,
     String odooUrl,
+    String database,
   );
   Future<void> resetPassword(String email, String odooUrl);
 }

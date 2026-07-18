@@ -14,36 +14,51 @@ class HomeAppBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     return AppBar(
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      title: Row(
+      backgroundColor: paperColor,
+      titleSpacing: 20,
+      toolbarHeight: 72,
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          CircleAvatar(
-            backgroundColor: mainColor.withOpacity(0.1),
-            child: const Icon(Icons.person, color: mainColor),
+          const Text(
+            'Rendiciones',
+            style: TextStyle(
+              color: mutedInkColor,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.7,
+            ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(height: 3),
           Text(
             'Hola, $userName',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
+              fontSize: 21,
+              fontWeight: FontWeight.w800,
+              color: inkColor,
+              letterSpacing: -0.35,
             ),
           ),
         ],
       ),
       actions: [
-        GestureDetector(
-          onTap: onProfilePressed,
-          child: Container(
-            margin: const EdgeInsets.only(right: 16),
-            child: const CircleAvatar(
-              radius: 18,
-              backgroundImage: NetworkImage(
-                'https://i.pravatar.cc/150?img=12', // Placeholder
+        Padding(
+          padding: const EdgeInsets.only(right: 16),
+          child: InkWell(
+            onTap: onProfilePressed,
+            borderRadius: BorderRadius.circular(18),
+            child: Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: receiptColor,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: lineColor),
               ),
+              child: const Icon(Icons.person_outline_rounded, color: inkColor),
             ),
           ),
         ),
@@ -52,5 +67,5 @@ class HomeAppBar extends StatelessWidget implements PreferredSizeWidget {
   }
 
   @override
-  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+  Size get preferredSize => const Size.fromHeight(72);
 }
