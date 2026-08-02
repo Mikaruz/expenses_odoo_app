@@ -1,4 +1,5 @@
 import 'package:oh_expenses_app/features/expenses/domain/entities/ocr_expense_result.dart';
+import 'package:oh_expenses_app/features/expenses/utils/money_utils.dart';
 
 class OcrParser {
   static const double _igvRate = 0.18;
@@ -49,7 +50,16 @@ class OcrParser {
     final date = _dateRegex.firstMatch(normalizedText)?.group(0) ?? '';
 
     final total = _extractTotal(lines);
-    final igv = _extractIgv(lines, total, upperText);
+    final taxTreatment = _extractTaxTreatment(lines, upperText);
+    final explicitIgv = _extractExplicitIgv(lines);
+    final igv = _extractIgv(lines, total, upperText, taxTreatment, explicitIgv);
+    final subtotalExtraction = _extractSubtotal(
+      lines,
+      total: total,
+      igv: igv,
+      taxTreatment: taxTreatment,
+      upperText: upperText,
+    );
 
     return OcrExpenseResult(
       ruc: ruc,
@@ -57,8 +67,12 @@ class OcrParser {
       type: type,
       date: date,
       serialNumber: serialNumber,
+      subtotal: subtotalExtraction.value,
       igv: igv,
       total: total,
+      taxTreatment: taxTreatment,
+      igvWasInferred: explicitIgv == null && igv > 0,
+      subtotalWasInferred: subtotalExtraction.wasInferred,
       rawText: text,
     );
   }
@@ -491,6 +505,183 @@ class OcrParser {
   }
 
   // ---------------------------------------------------------------------------
+  // Subtotal y tratamiento tributario
+  // ---------------------------------------------------------------------------
+
+  static _SubtotalExtraction _extractSubtotal(
+    List<String> lines, {
+    required double total,
+    required double igv,
+    required ExpenseTaxTreatment taxTreatment,
+    required String upperText,
+  }) {
+    final explicitSubtotal = _extractExplicitSubtotal(lines);
+    if (explicitSubtotal != null && explicitSubtotal >= 0) {
+      return _SubtotalExtraction(
+        value: _round2(explicitSubtotal),
+        wasInferred: false,
+      );
+    }
+
+    final operationBases = _extractOperationBases(lines);
+    if (operationBases.isNotEmpty) {
+      return _SubtotalExtraction(
+        value: _round2(operationBases.reduce((a, b) => a + b)),
+        wasInferred: false,
+      );
+    }
+
+    if (total > 0 && igv > 0 && _canDeriveAmount(upperText)) {
+      final derivedSubtotal = _round2(total - igv);
+      if (derivedSubtotal > 0) {
+        return _SubtotalExtraction(value: derivedSubtotal, wasInferred: true);
+      }
+    }
+
+    if (total > 0 &&
+        igv == 0 &&
+        (taxTreatment == ExpenseTaxTreatment.exempt ||
+            taxTreatment == ExpenseTaxTreatment.unaffected)) {
+      return _SubtotalExtraction(value: total, wasInferred: true);
+    }
+
+    return const _SubtotalExtraction(value: 0.0, wasInferred: false);
+  }
+
+  static double? _extractExplicitSubtotal(List<String> lines) {
+    for (var i = 0; i < lines.length; i++) {
+      final upper = lines[i].toUpperCase();
+      if (!upper.contains('SUBTOTAL') && !upper.contains('SUB TOTAL')) {
+        continue;
+      }
+
+      final amount = _firstAmountOnLineOrNext(lines, i);
+      if (amount != null && amount >= 0) return amount;
+    }
+
+    return null;
+  }
+
+  static List<double> _extractOperationBases(List<String> lines) {
+    final categorizedBases = <double>[];
+    final fallbackBases = <double>[];
+
+    for (final line in lines) {
+      final upper = line.toUpperCase();
+      if (_looksLikeNoiseLine(upper) || upper.contains('TOTAL')) continue;
+
+      final amount =
+          _firstDecimalAmountInLine(line) ?? _firstAmountInLine(line);
+      if (amount == null || amount < 0) continue;
+
+      final isCategorized =
+          upper.contains('GRAVADA') ||
+          upper.contains('GRAVADO') ||
+          upper.contains('EXONERADA') ||
+          upper.contains('EXONERADO') ||
+          upper.contains('INAFECTA') ||
+          upper.contains('INAFECTO');
+
+      final isFallback =
+          upper.contains('BASE IMPONIBLE') || upper.contains('VALOR VENTA');
+
+      if (isCategorized) {
+        categorizedBases.add(amount);
+      } else if (isFallback) {
+        fallbackBases.add(amount);
+      }
+    }
+
+    return categorizedBases.isNotEmpty ? categorizedBases : fallbackBases;
+  }
+
+  static double? _extractTaxableBase(List<String> lines) {
+    final gravadaBases = <double>[];
+    final fallbackBases = <double>[];
+
+    for (final line in lines) {
+      final upper = line.toUpperCase();
+      if (_looksLikeNoiseLine(upper) || upper.contains('TOTAL')) continue;
+
+      final amount =
+          _firstDecimalAmountInLine(line) ?? _firstAmountInLine(line);
+      if (amount == null || amount < 0) continue;
+
+      if (upper.contains('GRAVADA') || upper.contains('GRAVADO')) {
+        gravadaBases.add(amount);
+      } else if (upper.contains('BASE IMPONIBLE')) {
+        fallbackBases.add(amount);
+      }
+    }
+
+    final bases = gravadaBases.isNotEmpty ? gravadaBases : fallbackBases;
+    if (bases.isEmpty) return null;
+
+    return _round2(bases.reduce((a, b) => a + b));
+  }
+
+  static ExpenseTaxTreatment _extractTaxTreatment(
+    List<String> lines,
+    String upperText,
+  ) {
+    final hasExempt =
+        upperText.contains('EXONERADA') || upperText.contains('EXONERADO');
+    final hasUnaffected =
+        upperText.contains('INAFECTA') || upperText.contains('INAFECTO');
+    final hasTaxable =
+        upperText.contains('GRAVADA') ||
+        upperText.contains('GRAVADO') ||
+        upperText.contains('BASE IMPONIBLE') ||
+        _hasPositiveIgvEvidence(lines);
+
+    if (hasTaxable && (hasExempt || hasUnaffected)) {
+      return ExpenseTaxTreatment.mixed;
+    }
+
+    if (hasTaxable) return ExpenseTaxTreatment.taxable;
+    if (hasExempt && hasUnaffected) return ExpenseTaxTreatment.mixed;
+    if (hasExempt) return ExpenseTaxTreatment.exempt;
+    if (hasUnaffected) return ExpenseTaxTreatment.unaffected;
+
+    return ExpenseTaxTreatment.unknown;
+  }
+
+  static bool _hasPositiveIgvEvidence(List<String> lines) {
+    for (final line in lines) {
+      final upper = line.toUpperCase();
+      if (!upper.contains('IGV') &&
+          !upper.contains('I.G.V') &&
+          !upper.contains('IMPUESTO GENERAL')) {
+        continue;
+      }
+
+      final amount = _lastDecimalAmountInLine(line);
+      if (amount != null && amount > 0) return true;
+      if (upper.contains('18%')) return true;
+    }
+
+    return false;
+  }
+
+  static bool _canDeriveAmount(String upperText) {
+    const blocked = [
+      'DESCUENTO',
+      'DSCTO',
+      'PROPINA',
+      'ISC',
+      'ICBPER',
+      'REDONDEO',
+      'PERCEPCION',
+      'PERCEPCIÓN',
+      'RETENCION',
+      'RETENCIÓN',
+      'CARGO',
+    ];
+
+    return !blocked.any(upperText.contains);
+  }
+
+  // ---------------------------------------------------------------------------
   // IGV
   // ---------------------------------------------------------------------------
 
@@ -498,26 +689,37 @@ class OcrParser {
     List<String> lines,
     double total,
     String upperText,
+    ExpenseTaxTreatment taxTreatment,
+    double? explicitIgv,
   ) {
-    final explicitIgv = _extractExplicitIgv(lines);
-
     if (explicitIgv != null && explicitIgv >= 0) {
       return _round2(explicitIgv);
     }
 
     if (total <= 0) return 0.0;
 
-    // Si el comprobante parece ser exonerado o inafecto y no se encontró IGV explícito,
-    // es más seguro devolver 0 antes que inventar IGV.
-    if (_looksExoneratedOrUnaffected(upperText)) {
+    if (taxTreatment == ExpenseTaxTreatment.exempt ||
+        taxTreatment == ExpenseTaxTreatment.unaffected ||
+        taxTreatment == ExpenseTaxTreatment.mixed) {
+      final taxableBase = _extractTaxableBase(lines);
+      if (taxTreatment == ExpenseTaxTreatment.mixed && taxableBase != null) {
+        return _round2(taxableBase * _igvRate);
+      }
+
       return 0.0;
     }
 
-    // IGV incluido:
-    // total = base + IGV
-    // total = base * 1.18
-    // IGV = total - (total / 1.18)
-    // equivalente: IGV = total * 18 / 118
+    if (taxTreatment != ExpenseTaxTreatment.taxable ||
+        !_canDeriveAmount(upperText)) {
+      return 0.0;
+    }
+
+    final taxableBase = _extractTaxableBase(lines);
+    if (taxableBase != null) {
+      return _round2(taxableBase * _igvRate);
+    }
+
+    // Solo se infiere desde el total cuando el comprobante declara una operación gravada.
     return _round2(total * _igvRate / (1 + _igvRate));
   }
 
@@ -553,24 +755,72 @@ class OcrParser {
     return candidates.first.value;
   }
 
-  static bool _looksExoneratedOrUnaffected(String upperText) {
-    final hasExonerated =
-        upperText.contains('EXONERADA') ||
-        upperText.contains('EXONERADO') ||
-        upperText.contains('INAFECTA') ||
-        upperText.contains('INAFECTO');
-
-    final hasGravada =
-        upperText.contains('GRAVADA') ||
-        upperText.contains('GRAVADO') ||
-        upperText.contains('IGV');
-
-    return hasExonerated && !hasGravada;
-  }
-
   // ---------------------------------------------------------------------------
   // Montos
   // ---------------------------------------------------------------------------
+
+  static double? _firstAmountOnLineOrNext(List<String> lines, int index) {
+    final line = lines[index];
+    final amount = _firstDecimalAmountInLine(line) ?? _firstAmountInLine(line);
+    if (amount != null) return amount;
+
+    for (var offset = 1; offset <= 2; offset++) {
+      final nextIndex = index + offset;
+      if (nextIndex >= lines.length) break;
+
+      final nextLine = lines[nextIndex];
+      final nextUpper = nextLine.toUpperCase();
+      if (_looksLikeNoiseLine(nextUpper) || _hasFinancialLabel(nextUpper)) {
+        break;
+      }
+
+      final nextAmount =
+          _firstDecimalAmountInLine(nextLine) ?? _firstAmountInLine(nextLine);
+      if (nextAmount != null) return nextAmount;
+    }
+
+    return null;
+  }
+
+  static double? _firstAmountInLine(String line) {
+    final matches = _amountRegex.allMatches(line).toList();
+    for (final match in matches) {
+      final amount = _parseAmount(match.group(1) ?? '');
+      if (amount != null) return amount;
+    }
+
+    return null;
+  }
+
+  static double? _firstDecimalAmountInLine(String line) {
+    final matches = _decimalAmountRegex.allMatches(line).toList();
+    for (final match in matches) {
+      final amount = _parseAmount(match.group(1) ?? '');
+      if (amount != null) return amount;
+    }
+
+    return null;
+  }
+
+  static bool _hasFinancialLabel(String upper) {
+    const labels = [
+      'TOTAL',
+      'SUBTOTAL',
+      'SUB TOTAL',
+      'IGV',
+      'I.G.V',
+      'GRAVADA',
+      'GRAVADO',
+      'EXONERADA',
+      'EXONERADO',
+      'INAFECTA',
+      'INAFECTO',
+      'DESCUENTO',
+      'PROPINA',
+    ];
+
+    return labels.any(upper.contains);
+  }
 
   static double? _lastAmountInLine(String line) {
     final matches = _amountRegex.allMatches(line).toList();
@@ -597,51 +847,11 @@ class OcrParser {
   }
 
   static double? _parseAmount(String raw) {
-    var value = raw.trim();
-
-    if (value.isEmpty) return null;
-
-    value = value.replaceAll(RegExp(r'[^\d,.\-]'), '');
-
-    if (value.isEmpty) return null;
-
-    final hasComma = value.contains(',');
-    final hasDot = value.contains('.');
-
-    if (hasComma && hasDot) {
-      final lastComma = value.lastIndexOf(',');
-      final lastDot = value.lastIndexOf('.');
-
-      if (lastComma > lastDot) {
-        // Formato: 1.234,56
-        value = value.replaceAll('.', '').replaceAll(',', '.');
-      } else {
-        // Formato: 1,234.56
-        value = value.replaceAll(',', '');
-      }
-    } else if (hasComma) {
-      final parts = value.split(',');
-
-      if (parts.length > 1 && parts.last.length == 2) {
-        final integerPart = parts.sublist(0, parts.length - 1).join('');
-        value = '$integerPart.${parts.last}';
-      } else {
-        value = value.replaceAll(',', '');
-      }
-    } else if (hasDot) {
-      final parts = value.split('.');
-
-      if (parts.length > 2) {
-        final integerPart = parts.sublist(0, parts.length - 1).join('');
-        value = '$integerPart.${parts.last}';
-      }
-    }
-
-    return double.tryParse(value);
+    return MoneyUtils.parse(raw);
   }
 
   static double _round2(double value) {
-    return (value * 100).roundToDouble() / 100;
+    return MoneyUtils.round2(value);
   }
 }
 
@@ -676,4 +886,11 @@ class _AmountCandidate {
     required this.lineIndex,
     required this.line,
   });
+}
+
+class _SubtotalExtraction {
+  final double value;
+  final bool wasInferred;
+
+  const _SubtotalExtraction({required this.value, required this.wasInferred});
 }

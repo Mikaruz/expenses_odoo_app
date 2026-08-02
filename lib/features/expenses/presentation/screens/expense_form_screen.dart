@@ -3,7 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:oh_expenses_app/config/config.dart';
+import 'package:oh_expenses_app/features/expenses/domain/entities/ocr_expense_result.dart';
 import 'package:oh_expenses_app/features/expenses/presentation/providers/ocr_provider.dart';
+import 'package:oh_expenses_app/features/expenses/utils/expense_amount_validator.dart';
+import 'package:oh_expenses_app/features/expenses/utils/money_utils.dart';
 
 class ExpenseFormScreen extends ConsumerStatefulWidget {
   const ExpenseFormScreen({super.key});
@@ -20,8 +23,10 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
   late TextEditingController _typeController;
   late TextEditingController _dateController;
   late TextEditingController _serialController;
+  late TextEditingController _subtotalController;
   late TextEditingController _igvController;
   late TextEditingController _totalController;
+  String? _amountsError;
 
   @override
   void initState() {
@@ -36,8 +41,13 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
     _typeController = TextEditingController(text: result?.type ?? '');
     _dateController = TextEditingController(text: result?.date ?? '');
     _serialController = TextEditingController(text: result?.serialNumber ?? '');
+    _subtotalController = TextEditingController(
+      text: (result?.subtotal ?? 0) > 0
+          ? result!.subtotal.toStringAsFixed(2)
+          : '',
+    );
     _igvController = TextEditingController(
-      text: (result?.igv ?? 0) > 0 ? result!.igv.toStringAsFixed(2) : '',
+      text: result == null ? '' : result.igv.toStringAsFixed(2),
     );
     _totalController = TextEditingController(
       text: (result?.total ?? 0) > 0 ? result!.total.toStringAsFixed(2) : '',
@@ -51,19 +61,36 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
     _typeController.dispose();
     _dateController.dispose();
     _serialController.dispose();
+    _subtotalController.dispose();
     _igvController.dispose();
     _totalController.dispose();
     super.dispose();
   }
 
   void _saveExpense() {
-    if (_formKey.currentState!.validate()) {
-      // TODO: Implement save logic, maybe call another provider
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Gasto guardado exitosamente')),
-      );
-      context.pop(); // Go back to home
+    FocusScope.of(context).unfocus();
+
+    if (!_formKey.currentState!.validate()) return;
+
+    final result = ref.read(ocrProvider).result;
+    final validation = ExpenseAmountValidator.validate(
+      subtotal: MoneyUtils.parse(_subtotalController.text),
+      igv: MoneyUtils.parse(_igvController.text),
+      total: MoneyUtils.parse(_totalController.text),
+      taxTreatment: result?.taxTreatment ?? ExpenseTaxTreatment.unknown,
+    );
+
+    if (!validation.isValid) {
+      setState(() => _amountsError = validation.errorMessage);
+      return;
     }
+
+    setState(() => _amountsError = null);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Gasto guardado exitosamente')),
+    );
+    ref.read(ocrProvider.notifier).reset();
+    context.pop(); // Go back to home
   }
 
   void _showFullScreenImage(String imagePath) {
@@ -107,9 +134,12 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
           _typeController.text = result.type;
           _dateController.text = result.date;
           _serialController.text = result.serialNumber;
+          _subtotalController.text = result.subtotal > 0
+              ? result.subtotal.toStringAsFixed(2)
+              : '';
           _igvController.text = result.igv > 0
               ? result.igv.toStringAsFixed(2)
-              : '';
+              : '0.00';
           _totalController.text = result.total > 0
               ? result.total.toStringAsFixed(2)
               : '';
@@ -139,13 +169,17 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Buscando RUC, serie, IGV y total...',
+                'Buscando RUC, serie, subtotal, IGV y total...',
                 style: TextStyle(color: mutedInkColor),
               ),
             ],
           ),
         ),
       );
+    }
+
+    if (ocrState.isBlocked) {
+      return _buildBlockedState(ocrState.error);
     }
 
     return Scaffold(
@@ -159,23 +193,17 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (ocrState.error != null)
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  margin: const EdgeInsets.only(bottom: 20),
-                  decoration: BoxDecoration(
-                    color: dangerColor.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: dangerColor.withValues(alpha: 0.22),
-                    ),
-                  ),
-                  child: Text(
-                    ocrState.error!,
-                    style: const TextStyle(
-                      color: dangerColor,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                _buildNotice(
+                  message: ocrState.error!,
+                  color: dangerColor,
+                  icon: Icons.error_outline,
+                ),
+
+              if (ocrState.warnings.isNotEmpty)
+                _buildNotice(
+                  message: ocrState.warnings.join('\n'),
+                  color: warningColor,
+                  icon: Icons.warning_amber_rounded,
                 ),
 
               if (ocrState.imagePath != null)
@@ -264,6 +292,44 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
               _buildSection(
                 title: 'Montos',
                 children: [
+                  if (_amountsError != null)
+                    _buildNotice(
+                      message: _amountsError!,
+                      color: dangerColor,
+                      icon: Icons.error_outline,
+                    ),
+                  if (_amountsError != null) const SizedBox(height: 16),
+                  _buildTextField(
+                    controller: _subtotalController,
+                    label: 'Subtotal',
+                    icon: Icons.calculate_outlined,
+                    prefixText: 'S/ ',
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    onChanged: (_) => _clearAmountsError(),
+                    validator: (value) =>
+                        _validateMoneyField(value, label: 'Subtotal'),
+                  ),
+                  const SizedBox(height: 16),
+                  _buildTextField(
+                    controller: _igvController,
+                    label: 'IGV',
+                    icon: Icons.account_balance_wallet_outlined,
+                    prefixText: 'S/ ',
+                    helperText:
+                        'Usualmente 18%; usa 0.00 si es exonerado o inafecto.',
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    onChanged: (_) => _clearAmountsError(),
+                    validator: (value) => _validateMoneyField(
+                      value,
+                      label: 'IGV',
+                      allowZero: true,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   _buildTextField(
                     controller: _totalController,
                     label: 'Total',
@@ -272,20 +338,9 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
                     ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) return 'Requerido';
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  _buildTextField(
-                    controller: _igvController,
-                    label: 'IGV',
-                    icon: Icons.account_balance_wallet_outlined,
-                    prefixText: 'S/ ',
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
+                    onChanged: (_) => _clearAmountsError(),
+                    validator: (value) =>
+                        _validateMoneyField(value, label: 'Total'),
                   ),
                 ],
               ),
@@ -359,13 +414,17 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
     TextInputType keyboardType = TextInputType.text,
     String? Function(String?)? validator,
     String? prefixText,
+    String? helperText,
+    ValueChanged<String>? onChanged,
   }) {
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
       validator: validator,
+      onChanged: onChanged,
       decoration: InputDecoration(
         labelText: label,
+        helperText: helperText,
         prefixIcon: Icon(icon, color: mutedInkColor),
         prefixText: prefixText,
         prefixStyle: const TextStyle(
@@ -387,6 +446,120 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
         ),
         filled: true,
         fillColor: receiptColor,
+      ),
+    );
+  }
+
+  String? _validateMoneyField(
+    String? value, {
+    required String label,
+    bool allowZero = false,
+  }) {
+    if (value == null || value.trim().isEmpty) return 'Ingresa $label.';
+
+    final amount = MoneyUtils.parse(value);
+    if (amount == null) return 'Ingresa un monto válido para $label.';
+    if (amount < 0) return '$label no puede ser negativo.';
+    if (!allowZero && amount == 0) return '$label debe ser mayor que cero.';
+
+    return null;
+  }
+
+  void _clearAmountsError() {
+    if (_amountsError != null) setState(() => _amountsError = null);
+  }
+
+  Widget _buildNotice({
+    required String message,
+    required Color color,
+    required IconData icon,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 20),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.22)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(color: color, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBlockedState(String? error) {
+    return Scaffold(
+      backgroundColor: paperColor,
+      appBar: AppBar(title: const Text('Registrar gasto')),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: dangerColor.withValues(alpha: 0.10),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.receipt_long_outlined,
+                  color: dangerColor,
+                  size: 42,
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'No se puede registrar este comprobante',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: inkColor,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                error ?? 'No se pudo identificar un gasto en la imagen.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: mutedInkColor, height: 1.4),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    ref.read(ocrProvider.notifier).reset();
+                    context.pop();
+                  },
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Elegir otra imagen'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: inkColor,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

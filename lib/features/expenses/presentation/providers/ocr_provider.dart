@@ -4,33 +4,42 @@ import 'package:oh_expenses_app/config/config.dart';
 import 'package:oh_expenses_app/features/expenses/domain/domain.dart';
 import 'package:oh_expenses_app/features/expenses/infrastructure/infrastructure.dart';
 
+import 'package:oh_expenses_app/features/expenses/utils/expense_amount_validator.dart';
 import 'package:oh_expenses_app/features/expenses/utils/ocr_parser.dart';
 
 part 'ocr_provider.g.dart';
 
 class OcrState {
   final bool isLoading;
+  final bool isBlocked;
   final String? error;
+  final List<String> warnings;
   final OcrExpenseResult? result;
   final String? imagePath;
 
   const OcrState({
     this.isLoading = false,
+    this.isBlocked = false,
     this.error,
+    this.warnings = const [],
     this.result,
     this.imagePath,
   });
 
   OcrState copyWith({
     bool? isLoading,
+    bool? isBlocked,
     String? error,
+    List<String>? warnings,
     OcrExpenseResult? result,
     String? imagePath,
   }) {
     return OcrState(
       isLoading: isLoading ?? this.isLoading,
-      error: error, // Can be set to null
-      result: result, // Can be set to null
+      isBlocked: isBlocked ?? this.isBlocked,
+      error: error,
+      warnings: warnings ?? this.warnings,
+      result: result,
       imagePath: imagePath ?? this.imagePath,
     );
   }
@@ -62,7 +71,9 @@ class OcrNotifier extends _$OcrNotifier {
     if (!ref.mounted) return false;
     state = state.copyWith(
       isLoading: true,
+      isBlocked: false,
       error: null,
+      warnings: const [],
       result: null,
       imagePath: imagePath,
     );
@@ -77,7 +88,11 @@ class OcrNotifier extends _$OcrNotifier {
         Logger.warning('Provider: No se detectó texto.');
         state = state.copyWith(
           isLoading: false,
-          error: 'No se detectó texto en la imagen.',
+          isBlocked: true,
+          error:
+              'No se pudo leer la imagen. Toma una fotografía más nítida, '
+              'completa y con buena iluminación.',
+          warnings: const [],
         );
 
         return false;
@@ -86,23 +101,30 @@ class OcrNotifier extends _$OcrNotifier {
       final result = OcrParser.parse(text);
       if (!ref.mounted) return false;
 
-      // Basic validation to check if we found any important field
-      if (result.ruc.isEmpty && result.date.isEmpty && result.total == 0.0) {
-        Logger.warning('Provider: No se detectaron campos importantes.');
+      if (!_hasExpenseEvidence(result)) {
+        Logger.warning('Provider: No se detectó ningún comprobante de gasto.');
         state = state.copyWith(
           isLoading: false,
+          isBlocked: true,
           error:
-              'No se detectaron campos importantes. Por favor, ingrese los datos manualmente.',
+              'No se detectó ningún comprobante de gasto en la imagen. '
+              'Usa una foto de una boleta, factura o ticket.',
           result: result,
+          warnings: const [],
         );
-        return true;
+        return false;
       }
+
+      final warnings = _buildWarnings(result);
 
       Logger.success(
         'Provider: Parseo exitoso. Total detectado: ${result.total}',
       );
       state = state.copyWith(
         isLoading: false,
+        isBlocked: false,
+        error: null,
+        warnings: warnings,
         result: result,
         imagePath: imagePath,
       );
@@ -113,9 +135,77 @@ class OcrNotifier extends _$OcrNotifier {
 
       state = state.copyWith(
         isLoading: false,
+        isBlocked: true,
         error: 'Error procesando imagen: $e',
+        warnings: const [],
       );
       return false;
     }
+  }
+
+  bool _hasExpenseEvidence(OcrExpenseResult result) {
+    final hasAmount = result.total > 0 || result.subtotal > 0 || result.igv > 0;
+    final upperText = result.rawText.toUpperCase();
+    final hasReceiptMarker = RegExp(
+      r'\b(FACTURA|BOLETA|TICKET|RECIBO|COMPROBANTE|RUC|TOTAL|SUBTOTAL|'
+      r'IGV|GRAVADA|GRAVADO|EXONERADA|EXONERADO|INAFECTA|INAFECTO)\b',
+    ).hasMatch(upperText);
+    final identitySignals = [
+      result.ruc,
+      result.type,
+      result.serialNumber,
+    ].where((value) => value.isNotEmpty).length;
+
+    return (hasAmount && hasReceiptMarker) || identitySignals >= 2;
+  }
+
+  List<String> _buildWarnings(OcrExpenseResult result) {
+    final warnings = <String>[];
+
+    if (result.igvWasInferred) {
+      warnings.add(
+        'El IGV fue estimado usando la tasa usual del 18%. Confirma el importe.',
+      );
+    }
+
+    if (result.subtotalWasInferred) {
+      warnings.add(
+        'El subtotal fue calculado a partir de otros montos. Confirma que no '
+        'existan descuentos, propinas u otros cargos.',
+      );
+    }
+
+    if (result.taxTreatment == ExpenseTaxTreatment.exempt ||
+        result.taxTreatment == ExpenseTaxTreatment.unaffected) {
+      warnings.add(
+        'El comprobante parece exonerado o inafecto. Se considera IGV S/ 0.00; '
+        'confirma el valor.',
+      );
+    } else if (result.taxTreatment == ExpenseTaxTreatment.mixed) {
+      warnings.add(
+        'Se detectaron operaciones gravadas y no gravadas. El 18% aplica '
+        'únicamente sobre la base gravada; revisa el subtotal.',
+      );
+    }
+
+    if (result.subtotal <= 0 || result.total <= 0) {
+      warnings.add(
+        'Se detectó un comprobante parcialmente. Completa o revisa subtotal, '
+        'IGV y total.',
+      );
+    } else {
+      final validation = ExpenseAmountValidator.validate(
+        subtotal: result.subtotal,
+        igv: result.igv,
+        total: result.total,
+        taxTreatment: result.taxTreatment,
+      );
+
+      if (!validation.isValid && validation.errorMessage != null) {
+        warnings.add(validation.errorMessage!);
+      }
+    }
+
+    return warnings;
   }
 }
