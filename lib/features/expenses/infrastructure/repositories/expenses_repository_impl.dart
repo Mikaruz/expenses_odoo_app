@@ -15,4 +15,32 @@ class ExpensesRepositoryImpl extends ExpensesRepository {
   Future<String?> processImagePath(String imagePath) {
     return _datasource.processImagePath(imagePath);
   }
+
+  @override
+  Future<List<Expense>> getExpenses({
+    required String odooUrl,
+    required String database,
+    required String sessionId,
+    required int userId,
+  }) {
+    return _datasource.getExpenses(
+      odooUrl: odooUrl,
+      database: database,
+      sessionId: sessionId,
+      userId: userId,
+    );
+  }
+
+  @override
+  Future<List<ExpenseAttachment>> getExpenseAttachments({
+    required String odooUrl,
+    required String sessionId,
+    required int expenseId,
+  }) {
+    return _datasource.getExpenseAttachments(
+      odooUrl: odooUrl,
+      sessionId: sessionId,
+      expenseId: expenseId,
+    );
+  }
 }

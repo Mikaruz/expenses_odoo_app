@@ -24,22 +24,23 @@ class AuthNotifier extends _$AuthNotifier {
   Future<void> _checkAuthStatus() async {
     Logger.info("Verificando estado de autenticación...");
 
-    // TODO: Implementar lógica de autenticación automática y guardar dirección del servidor
+    final username = await _storage.getValue<String>('username');
+    final password = await _storage.getValue<String>('password');
+    final odooUrl = await _storage.getValue<String>('odooUrl');
+    final database = await _storage.getValue<String>('odooDatabase');
 
-    // final username = await _storage.getValue<String>('username');
-    // final password = await _storage.getValue<String>('password');
-    //
-    // if (username == null || password == null) {
-    //   return logout();
-    // }
-    //
-    // try {
-    //   await login(username, password);
-    // } catch (_) {
-    //   logout();
-    // }
+    if (username == null ||
+        username.trim().isEmpty ||
+        password == null ||
+        password.isEmpty ||
+        odooUrl == null ||
+        odooUrl.trim().isEmpty ||
+        database == null ||
+        database.trim().isEmpty) {
+      return logout();
+    }
 
-    logout();
+    await login(username, password, odooUrl, database);
   }
 
   Future<void> login(
@@ -58,7 +59,9 @@ class AuthNotifier extends _$AuthNotifier {
 
       Logger.info(authentication.name);
 
-      // * Guardar credenciales locales
+      // Persistencia local solicitada para evitar iniciar sesión manualmente.
+      await _storage.setKeyValue('username', username);
+      await _storage.setKeyValue('password', password);
       await _storage.setKeyValue('odooUrl', odooUrl);
       await _storage.setKeyValue('odooDatabase', database);
 
@@ -103,8 +106,11 @@ class AuthNotifier extends _$AuthNotifier {
   }
 
   Future<void> logout([String? errorMessage]) async {
-    // await _storage.removeKey('username');
-    // await _storage.removeKey('password');
+    if (errorMessage == null) {
+      await _storage.removeKey('username');
+      await _storage.removeKey('password');
+    }
+
     Logger.info("Cerrando sesión...");
     state = state.copyWith(
       authStatus: AuthStatus.unauthenticated,

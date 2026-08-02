@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:oh_expenses_app/config/config.dart';
 import 'package:oh_expenses_app/features/auth/presentation/providers/auth_provider.dart';
+import 'package:oh_expenses_app/features/expenses/presentation/providers/expenses_provider.dart';
 import 'package:oh_expenses_app/features/home/presentation/widgets/widgets.dart';
 import 'package:oh_expenses_app/features/home/presentation/screens/profile_screen.dart';
 import 'package:oh_expenses_app/features/expenses/presentation/providers/ocr_provider.dart';
@@ -15,6 +16,19 @@ class HomePage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authProvider);
     final userName = authState.user?.name ?? 'Usuario';
+
+    ref.listen(authProvider, (previous, next) {
+      if (previous?.user?.uid != next.user?.uid && next.user != null) {
+        ref.read(expensesProvider.notifier).loadExpenses();
+      }
+    });
+
+    Future.microtask(() {
+      final expensesState = ref.read(expensesProvider);
+      if (!expensesState.isLoading && !expensesState.hasLoaded) {
+        ref.read(expensesProvider.notifier).loadExpenses();
+      }
+    });
 
     return Scaffold(
       backgroundColor: paperColor,
@@ -47,7 +61,11 @@ class HomePage extends ConsumerWidget {
                       ),
                     ),
                   ),
-                  TextButton(onPressed: () {}, child: const Text('Ver todo')),
+                  TextButton(
+                    onPressed: () =>
+                        ref.read(expensesProvider.notifier).loadExpenses(),
+                    child: const Text('Actualizar'),
+                  ),
                 ],
               ),
             ),
@@ -102,10 +120,10 @@ class HomePage extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(height: 6),
-                const Text(
-                  'El OCR leerá RUC, fecha, serie, IGV y total para acelerar el registro.',
-                  style: TextStyle(color: mutedInkColor, height: 1.35),
-                ),
+                // const Text(
+                //   'El OCR leerá RUC, fecha, serie, IGV y total para acelerar el registro.',
+                //   style: TextStyle(color: mutedInkColor, height: 1.35),
+                // ),
                 const SizedBox(height: 16),
                 _ImageSourceTile(
                   icon: Icons.camera_alt_outlined,

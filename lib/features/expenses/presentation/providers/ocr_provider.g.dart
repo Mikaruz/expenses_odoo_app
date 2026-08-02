@@ -20,7 +20,7 @@ final class OcrNotifierProvider
         argument: null,
         retry: null,
         name: r'ocrProvider',
-        isAutoDispose: true,
+        isAutoDispose: false,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
@@ -41,7 +41,7 @@ final class OcrNotifierProvider
   }
 }
 
-String _$ocrNotifierHash() => r'a1a5eca0d722eb0ca96af07d67da3b84555e646e';
+String _$ocrNotifierHash() => r'3b5c346653ea78e49fe7b567a77ff89824f07502';
 
 abstract class _$OcrNotifier extends $Notifier<OcrState> {
   OcrState build();

@@ -1,6 +1,7 @@
 import 'package:go_router/go_router.dart';
 import 'package:oh_expenses_app/config/config.dart';
 import 'package:oh_expenses_app/features/auth/auth.dart';
+import 'package:oh_expenses_app/features/expenses/domain/domain.dart';
 import 'package:oh_expenses_app/features/home/home.dart';
 import 'package:oh_expenses_app/features/expenses/presentation/screens/expense_form_screen.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -33,7 +34,9 @@ GoRouter appRouter(Ref ref) {
       ),
       GoRoute(
         path: '/expense-detail',
-        builder: (context, state) => const ExpenseDetailScreen(),
+        builder: (context, state) => ExpenseDetailScreen(
+          expense: state.extra is Expense ? state.extra as Expense : null,
+        ),
       ),
       GoRoute(
         path: '/expense-form',

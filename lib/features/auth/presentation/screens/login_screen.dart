@@ -55,7 +55,7 @@ class _LoginFooter extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.only(bottom: 10),
         child: Text(
-          'Powered By BYR / EYM',
+          '',
           style: TextStyle(color: mutedInkColor.withValues(alpha: 0.78)),
         ),
       ),

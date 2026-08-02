@@ -1,11 +1,38 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:oh_expenses_app/config/config.dart';
+import 'package:oh_expenses_app/features/expenses/presentation/providers/expenses_provider.dart';
+import 'package:oh_expenses_app/features/home/presentation/widgets/expense_item.dart';
 
-class SummaryCard extends StatelessWidget {
+class SummaryCard extends ConsumerWidget {
   const SummaryCard({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final expensesState = ref.watch(expensesProvider);
+    final expenses = expensesState.expenses;
+    final total = expenses.fold<double>(
+      0,
+      (previous, expense) => previous + expense.totalAmount,
+    );
+    final pending = expenses
+        .where(
+          (expense) => mapExpenseStatus(expense.state) == ExpenseStatus.pending,
+        )
+        .length;
+    final approved = expenses
+        .where(
+          (expense) =>
+              mapExpenseStatus(expense.state) == ExpenseStatus.approved,
+        )
+        .length;
+    final observed = expenses
+        .where(
+          (expense) =>
+              mapExpenseStatus(expense.state) == ExpenseStatus.rejected,
+        )
+        .length;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(22),
@@ -53,7 +80,7 @@ class SummaryCard extends StatelessWidget {
                     ),
                     SizedBox(height: 2),
                     Text(
-                      'Comprobantes listos para revisar',
+                      'Datos sincronizados desde Odoo',
                       style: TextStyle(fontSize: 12, color: mutedInkColor),
                     ),
                   ],
@@ -62,9 +89,9 @@ class SummaryCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 20),
-          const Text(
-            'S/ 1,240.50',
-            style: TextStyle(
+          Text(
+            'S/ ${total.toStringAsFixed(2)}',
+            style: const TextStyle(
               fontSize: 34,
               fontWeight: FontWeight.w800,
               color: inkColor,
@@ -74,11 +101,23 @@ class SummaryCard extends StatelessWidget {
           const SizedBox(height: 16),
           Row(
             children: [
-              _MetricPill(label: 'Pendientes', value: '2', color: warningColor),
+              _MetricPill(
+                label: 'Pendientes',
+                value: pending.toString(),
+                color: warningColor,
+              ),
               const SizedBox(width: 10),
-              _MetricPill(label: 'Aprobados', value: '2', color: successColor),
+              _MetricPill(
+                label: 'Aprobados',
+                value: approved.toString(),
+                color: successColor,
+              ),
               const SizedBox(width: 10),
-              _MetricPill(label: 'Obs.', value: '1', color: dangerColor),
+              _MetricPill(
+                label: 'Obs.',
+                value: observed.toString(),
+                color: dangerColor,
+              ),
             ],
           ),
         ],

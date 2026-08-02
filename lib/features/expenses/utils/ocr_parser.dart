@@ -20,12 +20,12 @@ class OcrParser {
   );
 
   static final RegExp _amountRegex = RegExp(
-    r'(?:S\s*\/\.?|PEN|USD|\$)?\s*((?:\d{1,3}(?:[.,\s]\d{3})+|\d+)(?:[.,]\d{2})?)',
+    r'(?:S\s*\/\.?|PEN|USD|\$)?\s*(-?(?:\d{1,3}(?:[.,\s]\d{3})+|\d+)(?:[.,]\d{1,2})?)',
     caseSensitive: false,
   );
 
   static final RegExp _decimalAmountRegex = RegExp(
-    r'(?:S\s*\/\.?|PEN|USD|\$)?\s*((?:\d{1,3}(?:[.,\s]\d{3})+|\d+)[.,]\d{2})',
+    r'(?:S\s*\/\.?|PEN|USD|\$)?\s*(-?(?:\d{1,3}(?:[.,\s]\d{3})+|\d+)[.,]\d{1,2})',
     caseSensitive: false,
   );
 
@@ -229,8 +229,9 @@ class OcrParser {
     final upper = value.toUpperCase();
 
     if (value.length < 4) return false;
-    if (!RegExp(r'[A-ZÁÉÍÓÚÑ]', caseSensitive: false).hasMatch(value))
+    if (!RegExp(r'[A-ZÁÉÍÓÚÑ]', caseSensitive: false).hasMatch(value)) {
       return false;
+    }
 
     final blockedWords = [
       'RUC',
@@ -325,24 +326,56 @@ class OcrParser {
       final line = lines[i];
       final upper = line.toUpperCase();
 
+      if (_looksLikeNoiseLine(upper)) continue;
       if (!_looksLikeTotalLine(upper)) continue;
       if (_looksLikeNonTotalLine(upper)) continue;
 
-      final amount = _lastAmountInLine(line);
+      var amount = _lastDecimalAmountInLine(line) ?? _lastAmountInLine(line);
+      var amountLineIndex = i;
+
+      // En OCR real la etiqueta TOTAL suele quedar en una línea y el importe en la siguiente.
+      if (amount == null) {
+        for (var offset = 1; offset <= 2; offset++) {
+          final nextIndex = i + offset;
+          if (nextIndex >= lines.length) break;
+
+          final nextLine = lines[nextIndex];
+          final nextUpper = nextLine.toUpperCase();
+          if (_looksLikeNoiseLine(nextUpper) ||
+              _looksLikeNonTotalLine(nextUpper)) {
+            continue;
+          }
+
+          amount = _lastDecimalAmountInLine(nextLine);
+          if (amount != null) {
+            amountLineIndex = nextIndex;
+            break;
+          }
+        }
+      }
+
       if (amount == null || amount <= 0) continue;
 
       var score = 100;
 
-      if (upper.contains('TOTAL A PAGAR')) score += 60;
-      if (upper.contains('IMPORTE TOTAL')) score += 50;
-      if (upper.contains('TOTAL VENTA')) score += 40;
+      if (upper.contains('TOTAL A PAGAR')) score += 90;
+      if (upper.contains('IMPORTE TOTAL')) score += 80;
+      if (upper.contains('MONTO TOTAL')) score += 70;
+      if (upper.contains('TOTAL VENTA')) score += 60;
+      if (upper.contains('TOTAL S/')) score += 50;
       if (RegExp(r'\bTOTAL\b').hasMatch(upper)) score += 30;
+      if (amountLineIndex > i) score -= 8;
 
       // En comprobantes, el total suele estar más abajo.
-      score += i;
+      score += amountLineIndex;
 
       candidates.add(
-        _AmountCandidate(value: amount, score: score, lineIndex: i, line: line),
+        _AmountCandidate(
+          value: amount,
+          score: score,
+          lineIndex: amountLineIndex,
+          line: amountLineIndex == i ? line : lines[amountLineIndex],
+        ),
       );
     }
 
@@ -361,11 +394,16 @@ class OcrParser {
       final upper = line.toUpperCase();
 
       // Evitar montos de vuelto, efectivo, descuentos o IGV.
-      if (upper.contains('VUELTO') ||
+      if (_looksLikeNoiseLine(upper) ||
+          _looksLikeNegativeAmountLine(line) ||
+          upper.contains('VUELTO') ||
           upper.contains('CAMBIO') ||
           upper.contains('DESCUENTO') ||
           upper.contains('DSCTO') ||
-          upper.contains('IGV')) {
+          upper.contains('IGV') ||
+          upper.contains('PROPINA') ||
+          upper.contains('DONACION') ||
+          upper.contains('DONACIÓN')) {
         continue;
       }
 
@@ -386,7 +424,9 @@ class OcrParser {
   static bool _looksLikeTotalLine(String upper) {
     return upper.contains('TOTAL A PAGAR') ||
         upper.contains('IMPORTE TOTAL') ||
+        upper.contains('MONTO TOTAL') ||
         upper.contains('TOTAL VENTA') ||
+        upper.contains('TOTAL S/') ||
         RegExp(r'\bTOTAL\b').hasMatch(upper);
   }
 
@@ -413,9 +453,41 @@ class OcrParser {
       'TARJETA',
       'PAGO CON',
       'IGV',
+      'ISC',
     ];
 
     return blocked.any(upper.contains);
+  }
+
+  static bool _looksLikeNoiseLine(String upper) {
+    final blocked = [
+      'HTTP://',
+      'HTTPS://',
+      'WWW.',
+      '.COM',
+      '.PE',
+      'PAPERLESS',
+      'PORTAL',
+      'CONSULTA',
+      'CONSULTAR',
+      'POLITICA',
+      'POLÍTICA',
+      'TERMINOS',
+      'TÉRMINOS',
+      'CAMBIOS',
+      'REPRESENTACION IMPRESA',
+      'REPRESENTACIÓN IMPRESA',
+      'AUTORIZADO MEDIANTE',
+      'HASH',
+      'CODIGO QR',
+      'CÓDIGO QR',
+    ];
+
+    return blocked.any(upper.contains);
+  }
+
+  static bool _looksLikeNegativeAmountLine(String line) {
+    return RegExp(r'(^|\s)-\s*\d+[.,]\d{1,2}\b').hasMatch(line.trim());
   }
 
   // ---------------------------------------------------------------------------
@@ -463,7 +535,7 @@ class OcrParser {
 
       if (!hasIgvLabel) continue;
 
-      final amount = _lastAmountInLine(line);
+      final amount = _lastDecimalAmountInLine(line);
       if (amount == null || amount < 0) continue;
 
       var score = 100;
@@ -502,6 +574,18 @@ class OcrParser {
 
   static double? _lastAmountInLine(String line) {
     final matches = _amountRegex.allMatches(line).toList();
+    if (matches.isEmpty) return null;
+
+    for (final match in matches.reversed) {
+      final amount = _parseAmount(match.group(1) ?? '');
+      if (amount != null) return amount;
+    }
+
+    return null;
+  }
+
+  static double? _lastDecimalAmountInLine(String line) {
+    final matches = _decimalAmountRegex.allMatches(line).toList();
     if (matches.isEmpty) return null;
 
     for (final match in matches.reversed) {

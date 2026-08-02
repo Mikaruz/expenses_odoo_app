@@ -3,11 +3,50 @@ import 'package:oh_expenses_app/config/config.dart';
 
 enum ExpenseStatus { pending, approved, rejected }
 
+ExpenseStatus mapExpenseStatus(String state) {
+  switch (state) {
+    case 'approved':
+    case 'posted':
+    case 'in_payment':
+    case 'done':
+    case 'paid':
+      return ExpenseStatus.approved;
+    case 'refused':
+      return ExpenseStatus.rejected;
+    case 'draft':
+    case 'submitted':
+    default:
+      return ExpenseStatus.pending;
+  }
+}
+
+String mapExpenseStatusLabel(String state) {
+  switch (state) {
+    case 'draft':
+      return 'Borrador';
+    case 'submitted':
+      return 'Enviado';
+    case 'approved':
+      return 'Aprobado';
+    case 'posted':
+      return 'Publicado';
+    case 'in_payment':
+      return 'En pago';
+    case 'paid':
+      return 'Pagado';
+    case 'refused':
+      return 'Rechazado';
+    default:
+      return 'Pendiente';
+  }
+}
+
 class ExpenseItem extends StatelessWidget {
   final String title;
   final String date;
   final double amount;
   final ExpenseStatus status;
+  final String? statusLabel;
   final VoidCallback? onTap;
 
   const ExpenseItem({
@@ -16,6 +55,7 @@ class ExpenseItem extends StatelessWidget {
     required this.date,
     required this.amount,
     required this.status,
+    this.statusLabel,
     this.onTap,
   });
 
@@ -37,7 +77,7 @@ class ExpenseItem extends StatelessWidget {
       case ExpenseStatus.approved:
         return 'Aprobado';
       case ExpenseStatus.rejected:
-        return 'Observado';
+        return 'Rechazado';
     }
   }
 
@@ -124,7 +164,7 @@ class ExpenseItem extends StatelessWidget {
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: Text(
-                          _getStatusText(),
+                          statusLabel ?? _getStatusText(),
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w800,

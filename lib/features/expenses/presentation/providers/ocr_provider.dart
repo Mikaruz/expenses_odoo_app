@@ -36,7 +36,7 @@ class OcrState {
   }
 }
 
-@riverpod
+@Riverpod(keepAlive: true)
 class OcrNotifier extends _$OcrNotifier {
   late final _expenseRepository = ExpensesRepositoryImpl(
     ExpensesDatasourceImpl(),
@@ -48,6 +48,7 @@ class OcrNotifier extends _$OcrNotifier {
   }
 
   void reset() {
+    if (!ref.mounted) return;
     state = const OcrState();
   }
 
@@ -58,6 +59,7 @@ class OcrNotifier extends _$OcrNotifier {
   Future<bool> processImagePath(String imagePath) async {
     Logger.info('Iniciando Provider processImagePath...');
     // Conservamos la ruta de la imagen en el estado mientras carga
+    if (!ref.mounted) return false;
     state = state.copyWith(
       isLoading: true,
       error: null,
@@ -67,6 +69,8 @@ class OcrNotifier extends _$OcrNotifier {
 
     try {
       final text = await _expenseRepository.processImagePath(imagePath);
+      if (!ref.mounted) return false;
+
       Logger.info('Provider: Texto detectado por OCR:\n$text');
 
       if (text == null || text.trim().isEmpty) {
@@ -80,6 +84,7 @@ class OcrNotifier extends _$OcrNotifier {
       }
 
       final result = OcrParser.parse(text);
+      if (!ref.mounted) return false;
 
       // Basic validation to check if we found any important field
       if (result.ruc.isEmpty && result.date.isEmpty && result.total == 0.0) {
@@ -104,6 +109,8 @@ class OcrNotifier extends _$OcrNotifier {
       return true;
     } catch (e) {
       Logger.error('Provider: Error capturado - $e');
+      if (!ref.mounted) return false;
+
       state = state.copyWith(
         isLoading: false,
         error: 'Error procesando imagen: $e',
