@@ -1,120 +1,372 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:oh_expenses_app/config/config.dart';
 import 'package:oh_expenses_app/features/expenses/domain/domain.dart';
 import 'package:oh_expenses_app/features/expenses/presentation/providers/expense_attachments_provider.dart';
-import 'package:oh_expenses_app/features/home/presentation/widgets/expense_item.dart';
+import 'package:oh_expenses_app/features/expenses/presentation/providers/expenses_provider.dart';
 
-class ExpenseDetailScreen extends StatelessWidget {
-  final Expense? expense;
+class ExpenseDetailScreen extends ConsumerStatefulWidget {
+  final LocalExpense? expense;
 
   const ExpenseDetailScreen({super.key, this.expense});
 
-  Color _getStatusColor() {
-    switch (mapExpenseStatus(expense?.state ?? 'draft')) {
-      case ExpenseStatus.pending:
-        return warningColor;
-      case ExpenseStatus.approved:
-        return successColor;
-      case ExpenseStatus.rejected:
-        return dangerColor;
-    }
-  }
+  @override
+  ConsumerState<ExpenseDetailScreen> createState() =>
+      _ExpenseDetailScreenState();
+}
 
-  String _getStatusText() {
-    return mapExpenseStatusLabel(expense?.state ?? 'draft');
+class _ExpenseDetailScreenState extends ConsumerState<ExpenseDetailScreen> {
+  LocalExpense? _expense;
+
+  @override
+  void initState() {
+    super.initState();
+    _expense = widget.expense;
   }
 
   @override
   Widget build(BuildContext context) {
-    final currentExpense = expense;
-    final title = currentExpense?.name ?? 'Gasto';
-    final date = currentExpense?.date ?? 'Sin fecha';
-    final amount = currentExpense?.totalAmount ?? 0;
-    final category = currentExpense?.category.isNotEmpty == true
-        ? currentExpense!.category
-        : 'Sin categoría';
-    final description = currentExpense?.description.isNotEmpty == true
-        ? currentExpense!.description
-        : 'Sin descripción registrada.';
+    final currentExpense = _expense;
+    if (currentExpense == null) {
+      return const Scaffold(
+        backgroundColor: paperColor,
+        body: Center(child: Text('No se encontró el gasto local.')),
+      );
+    }
+
+    final statusColor = _statusColor(currentExpense.syncStatus);
+    final syncState = ref.watch(expenseSyncProvider);
 
     return Scaffold(
       backgroundColor: paperColor,
       appBar: AppBar(title: const Text('Detalle de gasto')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  color: receiptColor,
-                  borderRadius: BorderRadius.circular(26),
-                  border: Border.all(color: lineColor),
-                ),
-                child: const Icon(
-                  Icons.receipt_long_outlined,
-                  color: mainColor,
-                  size: 40,
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Center(
-              child: Text(
-                'S/ ${amount.toStringAsFixed(2)}',
-                style: const TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.w800,
-                  color: inkColor,
-                  letterSpacing: -0.8,
+      body: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: receiptColor,
+                    borderRadius: BorderRadius.circular(26),
+                    border: Border.all(color: lineColor),
+                  ),
+                  child: const Icon(
+                    Icons.receipt_long_outlined,
+                    color: mainColor,
+                    size: 40,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: _getStatusColor().withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(20),
-                ),
+              const SizedBox(height: 24),
+              Center(
                 child: Text(
-                  _getStatusText(),
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: _getStatusColor(),
+                  'S/ ${currentExpense.total.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.w800,
+                    color: inkColor,
+                    letterSpacing: -0.8,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    _statusLabel(currentExpense.syncStatus),
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: statusColor,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 40),
+              _DetailRow(label: 'Comercio', value: currentExpense.displayName),
+              const Divider(height: 32, color: lineColor),
+              _DetailRow(
+                label: 'RUC',
+                value: currentExpense.ruc.isEmpty
+                    ? 'Sin RUC'
+                    : currentExpense.ruc,
+              ),
+              const Divider(height: 32, color: lineColor),
+              _DetailRow(
+                label: currentExpense.isRemoteOnly
+                    ? 'Categoría'
+                    : 'Comprobante',
+                value: currentExpense.isRemoteOnly
+                    ? currentExpense.documentType
+                    : '${currentExpense.documentType} ${currentExpense.documentNumber}'
+                          .trim(),
+              ),
+              const Divider(height: 32, color: lineColor),
+              _DetailRow(
+                label: 'Fecha',
+                value: currentExpense.date.isEmpty
+                    ? 'Sin fecha'
+                    : currentExpense.date,
+              ),
+              if (!currentExpense.isRemoteOnly) ...[
+                const Divider(height: 32, color: lineColor),
+                _DetailRow(
+                  label: 'Subtotal',
+                  value: 'S/ ${currentExpense.subtotal.toStringAsFixed(2)}',
+                ),
+                const Divider(height: 32, color: lineColor),
+                _DetailRow(
+                  label: 'Impuesto',
+                  value:
+                      'S/ ${currentExpense.igv.toStringAsFixed(2)} '
+                      '(${currentExpense.taxRatePercentage.toStringAsFixed(2)}%)',
+                ),
+              ],
+              const Divider(height: 32, color: lineColor),
+              Text(
+                currentExpense.isRemoteOnly
+                    ? 'Adjuntos de Odoo'
+                    : 'Comprobante local',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: mutedInkColor,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 12),
+              if (currentExpense.isRemoteOnly &&
+                  currentExpense.remoteId != null)
+                _RemoteReceiptPreview(expenseId: currentExpense.remoteId!)
+              else
+                _LocalReceiptPreview(expense: currentExpense),
+              if (!currentExpense.isRemoteOnly) ...[
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: syncState.isSyncing
+                            ? null
+                            : () => _editExpense(currentExpense),
+                        icon: const Icon(Icons.edit_outlined),
+                        label: const Text('Editar'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed:
+                            syncState.isSyncing ||
+                                currentExpense.syncStatus ==
+                                    ExpenseSyncStatus.synced
+                            ? null
+                            : () => _syncExpense(currentExpense),
+                        icon: syncState.isSyncing
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.sync_rounded),
+                        label: Text(
+                          currentExpense.syncStatus == ExpenseSyncStatus.synced
+                              ? 'Sincronizado'
+                              : 'Sincronizar',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              if (currentExpense.lastSyncError?.isNotEmpty == true) ...[
+                const SizedBox(height: 20),
+                _SyncErrorNotice(message: currentExpense.lastSyncError!),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _syncExpense(LocalExpense expense) async {
+    final success = await ref
+        .read(expenseSyncProvider.notifier)
+        .syncExpense(expense);
+    final updated = await ref
+        .read(localExpensesRepositoryProvider)
+        .getExpense(expense.id, expense.accountScope);
+    if (!mounted) return;
+    if (updated != null) setState(() => _expense = updated);
+    final message = ref.read(expenseSyncProvider).message;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message.isNotEmpty
+              ? message
+              : success
+              ? 'Gasto sincronizado con Odoo.'
+              : 'No se pudo sincronizar el gasto.',
+        ),
+      ),
+    );
+  }
+
+  Future<void> _editExpense(LocalExpense expense) async {
+    final updated = await context.push<LocalExpense>(
+      '/expense-form',
+      extra: expense,
+    );
+    if (mounted && updated != null) setState(() => _expense = updated);
+  }
+
+  Color _statusColor(ExpenseSyncStatus status) {
+    return switch (status) {
+      ExpenseSyncStatus.pending => warningColor,
+      ExpenseSyncStatus.synced => successColor,
+      ExpenseSyncStatus.error => dangerColor,
+    };
+  }
+
+  String _statusLabel(ExpenseSyncStatus status) {
+    return switch (status) {
+      ExpenseSyncStatus.pending => 'Pendiente',
+      ExpenseSyncStatus.synced => 'Sincronizado',
+      ExpenseSyncStatus.error => 'Error',
+    };
+  }
+}
+
+class _RemoteReceiptPreview extends ConsumerWidget {
+  final int expenseId;
+
+  const _RemoteReceiptPreview({required this.expenseId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final attachmentsAsync = ref.watch(expenseAttachmentsProvider(expenseId));
+    return attachmentsAsync.when(
+      loading: () => const _AttachmentPlaceholder(
+        icon: Icons.cloud_download_outlined,
+        label: 'Consultando adjuntos...',
+        showLoader: true,
+      ),
+      error: (_, _) => const _AttachmentPlaceholder(
+        icon: Icons.cloud_off_outlined,
+        label: 'Inicia sesión nuevamente para consultar los adjuntos',
+      ),
+      data: (state) {
+        if (state.attachments.isEmpty) {
+          return const _AttachmentPlaceholder(
+            icon: Icons.image_not_supported_outlined,
+            label: 'Este gasto no tiene imágenes adjuntas',
+          );
+        }
+
+        final baseUrl = state.odooUrl.replaceFirst(RegExp(r'/+$'), '');
+        final headers = {'Cookie': 'session_id=${state.sessionId}'};
+        return SizedBox(
+          height: 260,
+          child: PageView.builder(
+            itemCount: state.attachments.length,
+            itemBuilder: (context, index) {
+              final attachment = state.attachments[index];
+              final imageUrl = '$baseUrl/web/content/${attachment.id}';
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: () =>
+                        _showFullScreenImage(context, imageUrl, headers),
+                    child: Ink(
+                      decoration: BoxDecoration(
+                        color: receiptColor,
+                        border: Border.all(color: lineColor),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Image.network(
+                          imageUrl,
+                          headers: headers,
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, _, _) =>
+                              const _AttachmentPlaceholder(
+                                icon: Icons.broken_image_outlined,
+                                label: 'No se pudo mostrar el adjunto',
+                              ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  void _showFullScreenImage(
+    BuildContext context,
+    String imageUrl,
+    Map<String, String> headers,
+  ) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black,
+      builder: (_) => Dialog.fullscreen(
+        backgroundColor: Colors.black,
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: InteractiveViewer(
+                minScale: 0.7,
+                maxScale: 5,
+                child: Center(
+                  child: Image.network(
+                    imageUrl,
+                    headers: headers,
+                    fit: BoxFit.contain,
                   ),
                 ),
               ),
             ),
-            const SizedBox(height: 40),
-            _DetailRow(label: 'Título', value: title),
-            const Divider(height: 32, color: lineColor),
-            _DetailRow(label: 'Fecha', value: date),
-            const Divider(height: 32, color: lineColor),
-            _DetailRow(label: 'Categoría', value: category),
-            const Divider(height: 32, color: lineColor),
-            _DetailRow(label: 'Descripción', value: description),
-            const Divider(height: 32, color: lineColor),
-            const Text(
-              'Comprobante',
-              style: TextStyle(
-                fontSize: 14,
-                color: mutedInkColor,
-                fontWeight: FontWeight.w500,
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.white.withValues(alpha: 0.12),
+                    foregroundColor: Colors.white,
+                  ),
+                  icon: const Icon(Icons.close_rounded),
+                ),
               ),
             ),
-            const SizedBox(height: 12),
-            _ExpenseAttachmentPreview(expenseId: currentExpense?.id),
-            const SizedBox(height: 28),
           ],
         ),
       ),
@@ -122,57 +374,39 @@ class ExpenseDetailScreen extends StatelessWidget {
   }
 }
 
-class _ExpenseAttachmentPreview extends ConsumerWidget {
-  final int? expenseId;
+class _LocalReceiptPreview extends ConsumerWidget {
+  final LocalExpense expense;
 
-  const _ExpenseAttachmentPreview({required this.expenseId});
+  const _LocalReceiptPreview({required this.expense});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final id = expenseId;
-    if (id == null || id <= 0) {
-      return const _AttachmentPlaceholder(
-        icon: Icons.image_outlined,
-        label: 'Sin comprobante disponible',
-      );
-    }
-
-    final attachmentsAsync = ref.watch(expenseAttachmentsProvider(id));
-
-    return attachmentsAsync.when(
+    final pathAsync = ref.watch(
+      receiptPathProvider(expense.receiptRelativePath),
+    );
+    return pathAsync.when(
       loading: () => const _AttachmentPlaceholder(
-        icon: Icons.hourglass_empty_rounded,
-        label: 'Buscando comprobante...',
+        icon: Icons.image_outlined,
+        label: 'Cargando comprobante...',
         showLoader: true,
       ),
       error: (_, _) => const _AttachmentPlaceholder(
         icon: Icons.broken_image_outlined,
-        label: 'No se pudo cargar el comprobante',
+        label: 'No se encontró el comprobante local',
       ),
-      data: (state) {
-        if (state.attachments.isEmpty) {
+      data: (path) {
+        if (!File(path).existsSync()) {
           return const _AttachmentPlaceholder(
-            icon: Icons.image_not_supported_outlined,
-            label: 'Este gasto no tiene imagen adjunta',
+            icon: Icons.broken_image_outlined,
+            label: 'No se encontró el comprobante local',
           );
         }
-
-        final attachment = state.attachments.first;
-        final baseUrl = state.odooUrl.endsWith('/')
-            ? state.odooUrl.substring(0, state.odooUrl.length - 1)
-            : state.odooUrl;
-        final imageUrl = '$baseUrl/web/content/${attachment.id}?download=false';
 
         return Material(
           color: Colors.transparent,
           child: InkWell(
             borderRadius: BorderRadius.circular(16),
-            onTap: () => _showFullScreenImage(
-              context,
-              imageUrl: imageUrl,
-              sessionId: state.sessionId,
-              title: attachment.name,
-            ),
+            onTap: () => _showFullScreenImage(context, path),
             child: Ink(
               width: double.infinity,
               height: 260,
@@ -186,23 +420,14 @@ class _ExpenseAttachmentPreview extends ConsumerWidget {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    Image.network(
-                      imageUrl,
+                    Image.file(
+                      File(path),
                       width: double.infinity,
                       fit: BoxFit.fitWidth,
-                      headers: {'Cookie': 'session_id=${state.sessionId}'},
                       errorBuilder: (_, _, _) => const _AttachmentPlaceholder(
                         icon: Icons.broken_image_outlined,
                         label: 'No se pudo mostrar la imagen',
                       ),
-                      loadingBuilder: (context, child, loadingProgress) {
-                        if (loadingProgress == null) return child;
-                        return const _AttachmentPlaceholder(
-                          icon: Icons.image_outlined,
-                          label: 'Cargando imagen...',
-                          showLoader: true,
-                        );
-                      },
                     ),
                     Positioned(
                       right: 10,
@@ -247,12 +472,7 @@ class _ExpenseAttachmentPreview extends ConsumerWidget {
     );
   }
 
-  void _showFullScreenImage(
-    BuildContext context, {
-    required String imageUrl,
-    required String sessionId,
-    required String title,
-  }) {
+  void _showFullScreenImage(BuildContext context, String imagePath) {
     showDialog(
       context: context,
       barrierColor: Colors.black,
@@ -265,53 +485,20 @@ class _ExpenseAttachmentPreview extends ConsumerWidget {
                 minScale: 0.7,
                 maxScale: 5,
                 child: Center(
-                  child: Image.network(
-                    imageUrl,
-                    fit: BoxFit.contain,
-                    headers: {'Cookie': 'session_id=$sessionId'},
-                    errorBuilder: (_, _, _) => const Center(
-                      child: Text(
-                        'No se pudo mostrar la imagen',
-                        style: TextStyle(color: Colors.white),
-                      ),
-                    ),
-                    loadingBuilder: (context, child, loadingProgress) {
-                      if (loadingProgress == null) return child;
-                      return const Center(
-                        child: CircularProgressIndicator(color: Colors.white),
-                      );
-                    },
-                  ),
+                  child: Image.file(File(imagePath), fit: BoxFit.contain),
                 ),
               ),
             ),
             SafeArea(
               child: Padding(
                 padding: const EdgeInsets.all(12),
-                child: Row(
-                  children: [
-                    IconButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      style: IconButton.styleFrom(
-                        backgroundColor: Colors.white.withValues(alpha: 0.12),
-                        foregroundColor: Colors.white,
-                      ),
-                      icon: const Icon(Icons.close_rounded),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
+                child: IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.white.withValues(alpha: 0.12),
+                    foregroundColor: Colors.white,
+                  ),
+                  icon: const Icon(Icons.close_rounded),
                 ),
               ),
             ),
@@ -367,6 +554,25 @@ class _AttachmentPlaceholder extends StatelessWidget {
   }
 }
 
+class _SyncErrorNotice extends StatelessWidget {
+  final String message;
+
+  const _SyncErrorNotice({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: dangerColor.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Text(message, style: const TextStyle(color: dangerColor)),
+    );
+  }
+}
+
 class _DetailRow extends StatelessWidget {
   final String label;
   final String value;
@@ -379,7 +585,7 @@ class _DetailRow extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox(
-          width: 100,
+          width: 104,
           child: Text(
             label,
             style: const TextStyle(
@@ -391,13 +597,13 @@ class _DetailRow extends StatelessWidget {
         ),
         Expanded(
           child: Text(
-            value,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
-              color: inkColor,
-            ),
+            value.isEmpty ? 'Sin información' : value,
             textAlign: TextAlign.right,
+            style: const TextStyle(
+              fontSize: 15,
+              color: inkColor,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
       ],

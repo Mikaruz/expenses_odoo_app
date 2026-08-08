@@ -43,4 +43,34 @@ class ExpensesRepositoryImpl extends ExpensesRepository {
       expenseId: expenseId,
     );
   }
+
+  @override
+  Future<int> createExpense({
+    required String odooUrl,
+    required String database,
+    required String sessionId,
+    required LocalExpense expense,
+  }) {
+    return _datasource.createExpense(
+      odooUrl: odooUrl,
+      database: database,
+      sessionId: sessionId,
+      expense: expense,
+    );
+  }
+
+  @override
+  Future<void> updateExpense({
+    required String odooUrl,
+    required String database,
+    required String sessionId,
+    required LocalExpense expense,
+  }) {
+    return _datasource.updateExpense(
+      odooUrl: odooUrl,
+      database: database,
+      sessionId: sessionId,
+      expense: expense,
+    );
+  }
 }

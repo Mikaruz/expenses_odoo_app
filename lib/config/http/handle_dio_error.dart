@@ -9,6 +9,7 @@ Never handleDioError(DioException e) {
     DioExceptionType.connectionTimeout => 'Tiempo de conexión agotado',
     DioExceptionType.sendTimeout => 'Tiempo de envío agotado',
     DioExceptionType.receiveTimeout => 'Tiempo de recepción agotado',
+    DioExceptionType.connectionError => 'No se pudo conectar con el servidor',
     DioExceptionType.badResponse =>
       'Respuesta incorrecta del servidor: ${e.message}',
     DioExceptionType.cancel => 'Solicitud cancelada',

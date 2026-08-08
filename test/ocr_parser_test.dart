@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:oh_expenses_app/features/config/infrastructure/mappers/tax_mapper.dart';
 import 'package:oh_expenses_app/features/expenses/domain/entities/ocr_expense_result.dart';
+import 'package:oh_expenses_app/features/expenses/utils/expense_amount_sync.dart';
 import 'package:oh_expenses_app/features/expenses/utils/expense_amount_validator.dart';
 import 'package:oh_expenses_app/features/expenses/utils/money_utils.dart';
 import 'package:oh_expenses_app/features/expenses/utils/ocr_parser.dart';
@@ -64,11 +66,28 @@ VUELTO 4.10
       final result = OcrParser.parse(text);
 
       expect(result.total, 45.90);
-      expect(result.subtotal, 0.0);
-      expect(result.igv, 0.0);
+      expect(result.subtotal, 38.90);
+      expect(result.igv, 7.00);
     });
 
-    test('no infiere impuesto ni subtotal desde un total aislado', () {
+    test('prioriza monto a pagar frente al efectivo entregado', () {
+      const text = '''
+RESTAURANTE DEMO
+OP. GRAVADA S/ 84.75
+IGV S/ 15.25
+MONTO A PAGAR S/ 100.00
+EFECTIVO S/ 150.00
+VUELTO S/ 50.00
+''';
+
+      final result = OcrParser.parse(text);
+
+      expect(result.total, 100.00);
+      expect(result.subtotal, 84.75);
+      expect(result.igv, 15.25);
+    });
+
+    test('usa 18% por defecto para derivar desde un total aislado', () {
       const text = '''
 TIENDA PERUANA
 TOTAL S/ 45.90
@@ -77,9 +96,11 @@ TOTAL S/ 45.90
       final result = OcrParser.parse(text);
 
       expect(result.total, 45.90);
-      expect(result.subtotal, 0.0);
-      expect(result.igv, 0.0);
+      expect(result.subtotal, 38.90);
+      expect(result.igv, 7.00);
       expect(result.taxTreatment, ExpenseTaxTreatment.unknown);
+      expect(result.igvWasInferred, isTrue);
+      expect(result.subtotalWasInferred, isTrue);
     });
 
     test('suma bases gravadas y exoneradas en un comprobante mixto', () {
@@ -118,7 +139,7 @@ TOTAL S/ 50.00
       expect(result.taxTreatment, ExpenseTaxTreatment.exempt);
     });
 
-    test('detecta una inconsistencia entre subtotal, IGV y total', () {
+    test('prioriza el total sobre subtotal e IGV inconsistentes', () {
       const text = '''
 SUBTOTAL S/ 100.00
 IGV S/ 17.00
@@ -126,14 +147,26 @@ TOTAL S/ 118.00
 ''';
 
       final result = OcrParser.parse(text);
-      final validation = ExpenseAmountValidator.validate(
-        subtotal: result.subtotal,
-        igv: result.igv,
-        total: result.total,
-      );
 
-      expect(validation.isValid, isFalse);
-      expect(validation.errorMessage, contains('subtotal + IGV = S/ 117.00'));
+      expect(result.subtotal, 100.00);
+      expect(result.igv, 18.00);
+      expect(result.total, 118.00);
+      expect(result.igvWasInferred, isTrue);
+      expect(result.subtotalWasInferred, isTrue);
+    });
+
+    test('deriva montos con la tasa configurada', () {
+      const text = '''
+RESTAURANTE DEMO
+FACTURA F001-123
+TOTAL S/ 110.00
+''';
+
+      final result = OcrParser.parse(text, ratePercentage: 10);
+
+      expect(result.subtotal, 100.00);
+      expect(result.igv, 10.00);
+      expect(result.total, 110.00);
     });
 
     test('acepta montos con formato decimal peruano', () {
@@ -163,7 +196,7 @@ TOTAL S/ 118.00
       );
 
       expect(validation.isValid, isFalse);
-      expect(validation.errorMessage, contains('IGV esperado al 18%'));
+      expect(validation.errorMessage, contains('esperado al 18.00%'));
     });
 
     test('permite una base general distinta al 18% en una operación mixta', () {
@@ -187,6 +220,72 @@ TOTAL S/ 118.00
 
       expect(validation.isValid, isFalse);
       expect(validation.errorMessage, contains('IGV S/ 0.00'));
+    });
+
+    test('valida una tasa configurada distinta de 18%', () {
+      final validation = ExpenseAmountValidator.validate(
+        subtotal: 100,
+        igv: 10,
+        total: 110,
+        taxTreatment: ExpenseTaxTreatment.taxable,
+        ratePercentage: 10,
+      );
+
+      expect(validation.isValid, isTrue);
+    });
+  });
+
+  group('ExpenseAmountSync', () {
+    test('redondea en centimos al calcular desde el total', () {
+      final amounts = ExpenseAmountSync.from(
+        anchorValue: 10,
+        anchor: ExpenseAnchor.total,
+        ratePercentage: 18,
+      );
+
+      expect(amounts?.subtotal, 8.47);
+      expect(amounts?.igv, 1.53);
+      expect(amounts?.total, 10.00);
+    });
+
+    test('usa impuesto cero para operaciones exoneradas', () {
+      final amounts = ExpenseAmountSync.from(
+        anchorValue: 50,
+        anchor: ExpenseAnchor.total,
+        ratePercentage: 0,
+      );
+
+      expect(amounts?.subtotal, 50.00);
+      expect(amounts?.igv, 0.00);
+      expect(amounts?.total, 50.00);
+    });
+  });
+
+  group('TaxMapper', () {
+    test('conserva la tasa porcentual enviada por Odoo', () {
+      final tax = TaxMapper.odooJsonToEntity({
+        'id': 7,
+        'name': 'IGV 18%',
+        'amount': 18.0,
+        'amount_type': 'percent',
+        'type_tax_use': 'purchase',
+      });
+
+      expect(tax.id, 7);
+      expect(tax.ratePercentage, 18.0);
+      expect(tax.supportsAutomaticCalculation, isTrue);
+    });
+
+    test('identifica impuestos no porcentuales como no compatibles', () {
+      final tax = TaxMapper.odooJsonToEntity({
+        'id': 8,
+        'name': 'Impuesto fijo',
+        'amount': 2.0,
+        'amount_type': 'fixed',
+        'type_tax_use': 'purchase',
+      });
+
+      expect(tax.supportsAutomaticCalculation, isFalse);
     });
   });
 }

@@ -41,7 +41,7 @@ final class OcrNotifierProvider
   }
 }
 
-String _$ocrNotifierHash() => r'c96e81e4ad4a4fc5ebcf845793787c1ffc19387a';
+String _$ocrNotifierHash() => r'10eaa1e9b488926fb700fee3d20c831647569781';
 
 abstract class _$OcrNotifier extends $Notifier<OcrState> {
   OcrState build();

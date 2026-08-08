@@ -1,11 +1,14 @@
 import 'package:image_picker/image_picker.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:oh_expenses_app/config/config.dart';
+import 'package:oh_expenses_app/features/auth/presentation/providers/auth_provider.dart';
+import 'package:oh_expenses_app/features/config/config.dart';
 import 'package:oh_expenses_app/features/expenses/domain/domain.dart';
 import 'package:oh_expenses_app/features/expenses/infrastructure/infrastructure.dart';
 
 import 'package:oh_expenses_app/features/expenses/utils/expense_amount_validator.dart';
 import 'package:oh_expenses_app/features/expenses/utils/ocr_parser.dart';
+import 'package:oh_expenses_app/features/shared/shared.dart';
 
 part 'ocr_provider.g.dart';
 
@@ -50,6 +53,8 @@ class OcrNotifier extends _$OcrNotifier {
   late final _expenseRepository = ExpensesRepositoryImpl(
     ExpensesDatasourceImpl(),
   );
+  late final _remoteOcrDatasource = ExpenseOcrDatasourceImpl();
+  late final _storage = KeyValueStorageServiceImpl();
 
   @override
   OcrState build() {
@@ -79,10 +84,13 @@ class OcrNotifier extends _$OcrNotifier {
     );
 
     try {
+      final remoteResult = await _tryRemoteOcr(imagePath);
+      if (remoteResult != null) {
+        return _publishResult(remoteResult, imagePath);
+      }
+
       final text = await _expenseRepository.processImagePath(imagePath);
       if (!ref.mounted) return false;
-
-      Logger.info('Provider: Texto detectado por OCR:\n$text');
 
       if (text == null || text.trim().isEmpty) {
         Logger.warning('Provider: No se detectó texto.');
@@ -98,7 +106,9 @@ class OcrNotifier extends _$OcrNotifier {
         return false;
       }
 
-      final result = OcrParser.parse(text);
+      await ref.read(taxSettingsProvider.notifier).load();
+      final ratePercentage = ref.read(taxSettingsProvider).ratePercentage;
+      final result = OcrParser.parse(text, ratePercentage: ratePercentage);
       if (!ref.mounted) return false;
 
       if (!_hasExpenseEvidence(result)) {
@@ -115,20 +125,17 @@ class OcrNotifier extends _$OcrNotifier {
         return false;
       }
 
-      final warnings = _buildWarnings(result);
-
-      Logger.success(
-        'Provider: Parseo exitoso. Total detectado: ${result.total}',
-      );
+      return _publishResult(result, imagePath, ratePercentage: ratePercentage);
+    } on ExpenseOcrRemoteException catch (e) {
+      Logger.error('Provider: Error del OCR remoto - ${e.message}');
+      if (!ref.mounted) return false;
       state = state.copyWith(
         isLoading: false,
-        isBlocked: false,
-        error: null,
-        warnings: warnings,
-        result: result,
-        imagePath: imagePath,
+        isBlocked: true,
+        error: e.message,
+        warnings: const [],
       );
-      return true;
+      return false;
     } catch (e) {
       Logger.error('Provider: Error capturado - $e');
       if (!ref.mounted) return false;
@@ -143,8 +150,97 @@ class OcrNotifier extends _$OcrNotifier {
     }
   }
 
+  Future<OcrExpenseResult?> _tryRemoteOcr(String imagePath) async {
+    final authState = ref.read(authProvider);
+    final authentication = authState.user;
+    if (authState.isOffline ||
+        authentication == null ||
+        authentication.sessionId.trim().isEmpty) {
+      Logger.info('OCR remoto omitido: no existe una sesión Odoo activa.');
+      return null;
+    }
+
+    final odooUrl = await _storage.getValue<String>('odooUrl');
+    final database = await _storage.getValue<String>('odooDatabase');
+    if (odooUrl == null || database == null || odooUrl.trim().isEmpty) {
+      Logger.info('OCR remoto omitido: falta configuración de Odoo.');
+      return null;
+    }
+
+    try {
+      Logger.info('Enviando comprobante al OCR de Odoo...');
+      final result = await _remoteOcrDatasource.processImage(
+        imagePath: imagePath,
+        odooUrl: odooUrl,
+        database: database,
+        sessionId: authentication.sessionId,
+      );
+      Logger.success('OCR de Odoo completado. Total: ${result.total}');
+      return result;
+    } on ExpenseOcrRemoteException catch (error) {
+      if (error.isConnectivityFailure) {
+        Logger.warning(
+          'OCR de Odoo no disponible; se usará OCR local: ${error.message}',
+        );
+        return null;
+      }
+      rethrow;
+    }
+  }
+
+  bool _publishResult(
+    OcrExpenseResult result,
+    String imagePath, {
+    double? ratePercentage,
+  }) {
+    if (!ref.mounted) return false;
+
+    final hasEvidence = _hasExpenseEvidence(result);
+    final serverBlocked =
+        result.isRemote && result.validationStatus == 'invalid';
+    if (!hasEvidence || serverBlocked) {
+      final message = result.validationMessages.isNotEmpty
+          ? result.validationMessages.join('\n')
+          : 'No se detectó ningún comprobante de gasto en la imagen.';
+      state = state.copyWith(
+        isLoading: false,
+        isBlocked: true,
+        error: message,
+        warnings: result.validationMessages,
+        result: result,
+        imagePath: imagePath,
+      );
+      return false;
+    }
+
+    final warnings = result.validationMessages.isNotEmpty
+        ? result.validationMessages
+        : _buildWarnings(
+            result,
+            ratePercentage ?? ref.read(taxSettingsProvider).ratePercentage,
+          );
+    Logger.success('Parseo OCR exitoso. Total detectado: ${result.total}');
+    state = state.copyWith(
+      isLoading: false,
+      isBlocked: false,
+      error: null,
+      warnings: warnings,
+      result: result,
+      imagePath: imagePath,
+    );
+    return true;
+  }
+
   bool _hasExpenseEvidence(OcrExpenseResult result) {
     final hasAmount = result.total > 0 || result.subtotal > 0 || result.igv > 0;
+    if (result.isRemote) {
+      final identitySignals = [
+        result.ruc,
+        result.type,
+        result.serialNumber,
+      ].where((value) => value.isNotEmpty).length;
+      return hasAmount && identitySignals >= 1;
+    }
     final upperText = result.rawText.toUpperCase();
     final hasReceiptMarker = RegExp(
       r'\b(FACTURA|BOLETA|TICKET|RECIBO|COMPROBANTE|RUC|TOTAL|SUBTOTAL|'
@@ -159,12 +255,13 @@ class OcrNotifier extends _$OcrNotifier {
     return (hasAmount && hasReceiptMarker) || identitySignals >= 2;
   }
 
-  List<String> _buildWarnings(OcrExpenseResult result) {
+  List<String> _buildWarnings(OcrExpenseResult result, double ratePercentage) {
     final warnings = <String>[];
 
     if (result.igvWasInferred) {
       warnings.add(
-        'El IGV fue estimado usando la tasa usual del 18%. Confirma el importe.',
+        'El impuesto fue calculado desde el total usando una tasa de '
+        '${ratePercentage.toStringAsFixed(2)}%. Confirma el importe.',
       );
     }
 
@@ -183,7 +280,7 @@ class OcrNotifier extends _$OcrNotifier {
       );
     } else if (result.taxTreatment == ExpenseTaxTreatment.mixed) {
       warnings.add(
-        'Se detectaron operaciones gravadas y no gravadas. El 18% aplica '
+        'Se detectaron operaciones gravadas y no gravadas. La tasa aplica '
         'únicamente sobre la base gravada; revisa el subtotal.',
       );
     }
@@ -199,6 +296,7 @@ class OcrNotifier extends _$OcrNotifier {
         igv: result.igv,
         total: result.total,
         taxTreatment: result.taxTreatment,
+        ratePercentage: ratePercentage,
       );
 
       if (!validation.isValid && validation.errorMessage != null) {

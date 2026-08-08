@@ -1,36 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:oh_expenses_app/config/config.dart';
+import 'package:oh_expenses_app/features/expenses/domain/domain.dart';
 import 'package:oh_expenses_app/features/expenses/presentation/providers/expenses_provider.dart';
-import 'package:oh_expenses_app/features/home/presentation/widgets/expense_item.dart';
 
 class SummaryCard extends ConsumerWidget {
   const SummaryCard({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final expensesState = ref.watch(expensesProvider);
-    final expenses = expensesState.expenses;
+    final expensesAsync = ref.watch(expensesProvider);
+    final expenses = expensesAsync.when(
+      data: (value) => value,
+      error: (_, _) => const <LocalExpense>[],
+      loading: () => const <LocalExpense>[],
+    );
     final total = expenses.fold<double>(
       0,
-      (previous, expense) => previous + expense.totalAmount,
+      (previous, expense) => previous + expense.total,
     );
     final pending = expenses
-        .where(
-          (expense) => mapExpenseStatus(expense.state) == ExpenseStatus.pending,
-        )
+        .where((expense) => expense.syncStatus == ExpenseSyncStatus.pending)
         .length;
-    final approved = expenses
-        .where(
-          (expense) =>
-              mapExpenseStatus(expense.state) == ExpenseStatus.approved,
-        )
+    final synced = expenses
+        .where((expense) => expense.syncStatus == ExpenseSyncStatus.synced)
         .length;
-    final observed = expenses
-        .where(
-          (expense) =>
-              mapExpenseStatus(expense.state) == ExpenseStatus.rejected,
-        )
+    final errors = expenses
+        .where((expense) => expense.syncStatus == ExpenseSyncStatus.error)
         .length;
 
     return Container(
@@ -71,7 +67,7 @@ class SummaryCard extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Gastos del mes',
+                      'Gastos locales',
                       style: TextStyle(
                         fontSize: 13,
                         color: mutedInkColor,
@@ -80,7 +76,7 @@ class SummaryCard extends ConsumerWidget {
                     ),
                     SizedBox(height: 2),
                     Text(
-                      'Datos sincronizados desde Odoo',
+                      'Disponibles sin conexión',
                       style: TextStyle(fontSize: 12, color: mutedInkColor),
                     ),
                   ],
@@ -108,14 +104,14 @@ class SummaryCard extends ConsumerWidget {
               ),
               const SizedBox(width: 10),
               _MetricPill(
-                label: 'Aprobados',
-                value: approved.toString(),
+                label: 'Sincronizados',
+                value: synced.toString(),
                 color: successColor,
               ),
               const SizedBox(width: 10),
               _MetricPill(
-                label: 'Obs.',
-                value: observed.toString(),
+                label: 'Errores',
+                value: errors.toString(),
                 color: dangerColor,
               ),
             ],

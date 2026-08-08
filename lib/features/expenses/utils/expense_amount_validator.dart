@@ -16,13 +16,12 @@ class ExpenseAmountValidation {
 }
 
 class ExpenseAmountValidator {
-  static const int _igvPercentage = 18;
-
   static ExpenseAmountValidation validate({
     required double? subtotal,
     required double? igv,
     required double? total,
     ExpenseTaxTreatment taxTreatment = ExpenseTaxTreatment.unknown,
+    double ratePercentage = 18,
   }) {
     if (subtotal == null || igv == null || total == null) {
       return const ExpenseAmountValidation(
@@ -72,14 +71,15 @@ class ExpenseAmountValidator {
     }
 
     if (taxTreatment == ExpenseTaxTreatment.taxable) {
-      final expectedIgvCents = (subtotalCents * _igvPercentage / 100).round();
+      final expectedIgvCents = (subtotalCents * ratePercentage / 100).round();
 
       if (igvCents != expectedIgvCents) {
         return ExpenseAmountValidation(
           isValid: false,
           expectedIgvCents: expectedIgvCents,
           errorMessage:
-              'Para una operación gravada, el IGV esperado al 18% es S/ '
+              'Para una operación gravada, el impuesto esperado al '
+              '${ratePercentage.toStringAsFixed(2)}% es S/ '
               '${MoneyUtils.formatCents(expectedIgvCents)}.',
         );
       }

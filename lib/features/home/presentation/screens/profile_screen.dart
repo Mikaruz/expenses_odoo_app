@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:oh_expenses_app/features/auth/auth.dart';
 import 'package:oh_expenses_app/config/config.dart';
 
@@ -59,7 +60,7 @@ class ProfileScreen extends ConsumerWidget {
             _ProfileOption(
               icon: Icons.settings_outlined,
               title: 'Configuración',
-              onTap: () {},
+              onTap: () => context.push('/tax-config'),
             ),
             _ProfileOption(
               icon: Icons.help_outline,
@@ -106,33 +107,39 @@ class _ProfileOption extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Material(
         color: surfaceColor,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: lineColor),
-      ),
-      child: ListTile(
-        leading: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: mainColor.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Icon(icon, color: mainColor),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: const BorderSide(color: lineColor),
         ),
-        title: Text(
-          title,
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: inkColor,
+        clipBehavior: Clip.antiAlias,
+        child: ListTile(
+          leading: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: mainColor.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: mainColor),
+          ),
+          title: Text(
+            title,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: inkColor,
+            ),
+          ),
+          trailing: const Icon(Icons.chevron_right, color: mutedInkColor),
+          onTap: onTap,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 4,
           ),
         ),
-        trailing: const Icon(Icons.chevron_right, color: mutedInkColor),
-        onTap: onTap,
-        contentPadding: const EdgeInsets.symmetric(vertical: 4),
       ),
     );
   }

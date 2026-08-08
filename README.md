@@ -1,16 +1,32 @@
 # expenses_odoo_app
 
-A new Flutter project.
+Aplicacion Flutter para registrar gastos en Odoo.
 
-## Getting Started
+## OCR de Odoo
 
-This project is a starting point for a Flutter application.
+Cuando existe una sesion activa y hay conectividad, la app envia la imagen al
+OCR del modulo `expense_ocr` mediante:
 
-A few resources to get you started if this is your first Flutter project:
+```text
+POST /expense_ocr/api/v1/session/documents
+GET  /expense_ocr/api/v1/session/documents/<id>
+```
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+La app usa la cookie `session_id` creada durante el login normal de Odoo. No se
+guarda una API key de Odoo en el dispositivo. El usuario de Odoo debe tener el
+grupo `Expense OCR User`, un empleado relacionado y acceso a la compania activa.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+El comprobante se procesa en Odoo y la app mapea RUC, razon social, tipo
+Factura/Boleta, serie, numero, fecha, subtotal, IGV y total.
+
+Si no existe sesion, la app esta en modo offline o la conexion falla, utiliza
+el OCR local de ML Kit. Los errores funcionales devueltos por Odoo no se
+reemplazan silenciosamente con un resultado local.
+
+## Desarrollo
+
+```bash
+flutter pub get
+flutter analyze
+flutter test
+```

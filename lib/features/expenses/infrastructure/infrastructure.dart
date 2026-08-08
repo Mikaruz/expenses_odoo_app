@@ -1,3 +1,11 @@
 export 'datasources/expenses_datasource_impl.dart';
+export 'datasources/expense_ocr_datasource_impl.dart';
+export 'datasources/drift_local_expenses_datasource.dart';
+export 'datasources/receipt_storage_datasource_impl.dart';
+export 'database/expenses_database.dart';
 export 'mappers/expense_mapper.dart';
+export 'mappers/expense_ocr_mapper.dart';
+export 'mappers/local_expense_mapper.dart';
 export 'repositories/expenses_repository_impl.dart';
+export 'repositories/local_expenses_repository_impl.dart';
+export 'services/expense_sync_service.dart';

@@ -1,51 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:oh_expenses_app/config/config.dart';
-
-enum ExpenseStatus { pending, approved, rejected }
-
-ExpenseStatus mapExpenseStatus(String state) {
-  switch (state) {
-    case 'approved':
-    case 'posted':
-    case 'in_payment':
-    case 'done':
-    case 'paid':
-      return ExpenseStatus.approved;
-    case 'refused':
-      return ExpenseStatus.rejected;
-    case 'draft':
-    case 'submitted':
-    default:
-      return ExpenseStatus.pending;
-  }
-}
-
-String mapExpenseStatusLabel(String state) {
-  switch (state) {
-    case 'draft':
-      return 'Borrador';
-    case 'submitted':
-      return 'Enviado';
-    case 'approved':
-      return 'Aprobado';
-    case 'posted':
-      return 'Publicado';
-    case 'in_payment':
-      return 'En pago';
-    case 'paid':
-      return 'Pagado';
-    case 'refused':
-      return 'Rechazado';
-    default:
-      return 'Pendiente';
-  }
-}
+import 'package:oh_expenses_app/features/expenses/domain/domain.dart';
 
 class ExpenseItem extends StatelessWidget {
   final String title;
   final String date;
   final double amount;
-  final ExpenseStatus status;
+  final ExpenseSyncStatus status;
   final String? statusLabel;
   final VoidCallback? onTap;
 
@@ -61,23 +22,23 @@ class ExpenseItem extends StatelessWidget {
 
   Color _getStatusColor() {
     switch (status) {
-      case ExpenseStatus.pending:
+      case ExpenseSyncStatus.pending:
         return warningColor;
-      case ExpenseStatus.approved:
+      case ExpenseSyncStatus.synced:
         return successColor;
-      case ExpenseStatus.rejected:
+      case ExpenseSyncStatus.error:
         return dangerColor;
     }
   }
 
   String _getStatusText() {
     switch (status) {
-      case ExpenseStatus.pending:
+      case ExpenseSyncStatus.pending:
         return 'Pendiente';
-      case ExpenseStatus.approved:
-        return 'Aprobado';
-      case ExpenseStatus.rejected:
-        return 'Rechazado';
+      case ExpenseSyncStatus.synced:
+        return 'Sincronizado';
+      case ExpenseSyncStatus.error:
+        return 'Error';
     }
   }
 

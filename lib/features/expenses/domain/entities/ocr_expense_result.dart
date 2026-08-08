@@ -13,6 +13,9 @@ class OcrExpenseResult {
   final bool igvWasInferred;
   final bool subtotalWasInferred;
   final String rawText;
+  final bool isRemote;
+  final String? validationStatus;
+  final List<String> validationMessages;
 
   const OcrExpenseResult({
     required this.ruc,
@@ -27,5 +30,8 @@ class OcrExpenseResult {
     this.igvWasInferred = false,
     this.subtotalWasInferred = false,
     required this.rawText,
+    this.isRemote = false,
+    this.validationStatus,
+    this.validationMessages = const [],
   });
 }

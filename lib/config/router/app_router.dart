@@ -1,6 +1,7 @@
 import 'package:go_router/go_router.dart';
 import 'package:oh_expenses_app/config/config.dart';
 import 'package:oh_expenses_app/features/auth/auth.dart';
+import 'package:oh_expenses_app/features/config/config.dart';
 import 'package:oh_expenses_app/features/expenses/domain/domain.dart';
 import 'package:oh_expenses_app/features/home/home.dart';
 import 'package:oh_expenses_app/features/expenses/presentation/screens/expense_form_screen.dart';
@@ -21,10 +22,6 @@ GoRouter appRouter(Ref ref) {
         builder: (context, state) => const CheckAuthStatusScreen(),
       ),
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
-      GoRoute(
-        path: '/forget-password',
-        builder: (context, state) => const ForgetPasswordScreen(),
-      ),
 
       GoRoute(
         path: '/home',
@@ -35,12 +32,22 @@ GoRouter appRouter(Ref ref) {
       GoRoute(
         path: '/expense-detail',
         builder: (context, state) => ExpenseDetailScreen(
-          expense: state.extra is Expense ? state.extra as Expense : null,
+          expense: state.extra is LocalExpense
+              ? state.extra as LocalExpense
+              : null,
         ),
       ),
       GoRoute(
         path: '/expense-form',
-        builder: (context, state) => const ExpenseFormScreen(),
+        builder: (context, state) => ExpenseFormScreen(
+          expense: state.extra is LocalExpense
+              ? state.extra as LocalExpense
+              : null,
+        ),
+      ),
+      GoRoute(
+        path: '/tax-config',
+        builder: (context, state) => const TaxConfigScreen(),
       ),
     ],
     redirect: (context, state) {
@@ -52,7 +59,7 @@ GoRouter appRouter(Ref ref) {
       }
 
       if (authStatus == AuthStatus.unauthenticated) {
-        final publicRoutes = ['/login', '/forget-password'];
+        const publicRoutes = ['/login'];
         return publicRoutes.contains(isGoingTo) ? null : '/login';
       }
 

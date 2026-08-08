@@ -22,17 +22,18 @@ class AuthNotifier extends _$AuthNotifier {
   }
 
   Future<void> _checkAuthStatus() async {
-    Logger.info("Verificando estado de autenticación...");
+    Logger.info('Verificando identidad local...');
 
-    final username = await _storage.getValue<String>('username');
-    final password = await _storage.getValue<String>('password');
+    final uid = await _storage.getValue<String>('offlineUid');
+    final name = await _storage.getValue<String>('offlineName');
+    final email = await _storage.getValue<String>('offlineEmail');
     final odooUrl = await _storage.getValue<String>('odooUrl');
     final database = await _storage.getValue<String>('odooDatabase');
 
-    if (username == null ||
-        username.trim().isEmpty ||
-        password == null ||
-        password.isEmpty ||
+    if (uid == null ||
+        uid.trim().isEmpty ||
+        name == null ||
+        name.trim().isEmpty ||
         odooUrl == null ||
         odooUrl.trim().isEmpty ||
         database == null ||
@@ -40,7 +41,10 @@ class AuthNotifier extends _$AuthNotifier {
       return logout();
     }
 
-    await login(username, password, odooUrl, database);
+    _setLoggedUser(
+      Authentication(uid: uid, name: name, email: email ?? '', sessionId: ''),
+      isOffline: true,
+    );
   }
 
   Future<void> login(
@@ -57,13 +61,15 @@ class AuthNotifier extends _$AuthNotifier {
         database,
       );
 
-      Logger.info(authentication.name);
-
-      // Persistencia local solicitada para evitar iniciar sesión manualmente.
+      // La identidad permite acceso offline; la contraseña no se persiste.
       await _storage.setKeyValue('username', username);
-      await _storage.setKeyValue('password', password);
       await _storage.setKeyValue('odooUrl', odooUrl);
       await _storage.setKeyValue('odooDatabase', database);
+      await _storage.setKeyValue('odooConnectionValidated', true);
+      await _storage.setKeyValue('offlineUid', authentication.uid);
+      await _storage.setKeyValue('offlineName', authentication.name);
+      await _storage.setKeyValue('offlineEmail', authentication.email);
+      await _storage.removeKey('password');
 
       _setLoggedUser(authentication);
     } on CustomError catch (e) {
@@ -75,46 +81,36 @@ class AuthNotifier extends _$AuthNotifier {
     }
   }
 
-  void _setLoggedUser(Authentication authentication) {
-    Logger.success("Usuario autenticado: ${authentication.name}");
+  Future<void> validateConnection(String odooUrl, String database) {
+    return _authRepository.validateConnection(odooUrl, database);
+  }
+
+  void _setLoggedUser(Authentication authentication, {bool isOffline = false}) {
+    Logger.success(
+      isOffline ? 'Identidad local restaurada' : 'Usuario autenticado',
+    );
     state = state.copyWith(
       authStatus: AuthStatus.authenticated,
       user: authentication,
+      isOffline: isOffline,
       errorMessage: '',
     );
-  }
-
-  Future<void> resetPassword(String email, String odooUrl) async {
-    try {
-      await _authRepository.resetPassword(email, odooUrl);
-      Logger.info(
-        "Solicitud de restablecimiento de contraseña enviada para $email",
-      );
-    } on CustomError catch (e) {
-      Logger.error(
-        "Error al solicitar restablecimiento de contraseña: ${e.message}",
-      );
-      rethrow;
-    } catch (_) {
-      Logger.error(
-        "Error inesperado al solicitar restablecimiento de contraseña.",
-      );
-      throw CustomError(
-        'Error inesperado al solicitar restablecimiento de contraseña.',
-      );
-    }
   }
 
   Future<void> logout([String? errorMessage]) async {
     if (errorMessage == null) {
       await _storage.removeKey('username');
       await _storage.removeKey('password');
+      await _storage.removeKey('offlineUid');
+      await _storage.removeKey('offlineName');
+      await _storage.removeKey('offlineEmail');
     }
 
-    Logger.info("Cerrando sesión...");
+    Logger.info('Cerrando sesión...');
     state = state.copyWith(
       authStatus: AuthStatus.unauthenticated,
-      user: null,
+      clearUser: true,
+      isOffline: false,
       errorMessage: errorMessage,
     );
   }
@@ -134,23 +130,28 @@ class AuthNotifier extends _$AuthNotifier {
 class AuthState {
   final AuthStatus authStatus;
   final Authentication? user;
+  final bool isOffline;
   final String errorMessage;
 
   const AuthState({
     this.authStatus = AuthStatus.checking,
     this.user,
+    this.isOffline = false,
     this.errorMessage = '',
   });
 
   AuthState copyWith({
     AuthStatus? authStatus,
     Authentication? user,
+    bool clearUser = false,
+    bool? isOffline,
     String? errorMessage,
     String? deviceId,
   }) {
     return AuthState(
       authStatus: authStatus ?? this.authStatus,
-      user: user ?? this.user,
+      user: clearUser ? null : user ?? this.user,
+      isOffline: isOffline ?? this.isOffline,
       errorMessage: errorMessage ?? this.errorMessage,
     );
   }

@@ -59,11 +59,16 @@ class LoginFormNotifier extends _$LoginFormNotifier {
     final storage = KeyValueStorageServiceImpl();
     final odooUrl = await storage.getValue<String>('odooUrl');
     final database = await storage.getValue<String>('odooDatabase');
+    final connectionValidated =
+        await storage.getValue<bool>('odooConnectionValidated') ?? false;
 
     final configuredUrl = Url.dirty(odooUrl ?? '');
-    if (!configuredUrl.isValid || database == null || database.trim().isEmpty) {
+    if (!configuredUrl.isValid ||
+        database == null ||
+        database.trim().isEmpty ||
+        !connectionValidated) {
       auth.setError(
-        'Configura el servidor Odoo y la base de datos antes de iniciar sesión.',
+        'Configura y valida el servidor Odoo antes de iniciar sesión.',
       );
       state = state.copyWith(isLoading: false);
 

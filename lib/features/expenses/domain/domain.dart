@@ -1,5 +1,12 @@
 export 'datasources/expenses_datasource.dart';
+export 'datasources/expense_ocr_datasource.dart';
+export 'datasources/local_expenses_datasource.dart';
+export 'datasources/receipt_storage_datasource.dart';
 export 'entities/expense.dart';
 export 'entities/expense_attachment.dart';
+export 'entities/expense_draft.dart';
+export 'entities/expense_sync_status.dart';
+export 'entities/local_expense.dart';
 export 'entities/ocr_expense_result.dart';
 export 'repositories/expenses_repository.dart';
+export 'repositories/local_expenses_repository.dart';

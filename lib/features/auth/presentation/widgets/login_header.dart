@@ -35,56 +35,6 @@ class LoginHeader extends StatelessWidget {
           ),
           child: Stack(
             children: [
-              Positioned(
-                right: -34,
-                top: 34,
-                child: Container(
-                  width: 150,
-                  height: 150,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.12),
-                      width: 18,
-                    ),
-                  ),
-                ),
-              ),
-              Positioned(
-                right: 28,
-                bottom: 42,
-                child: Transform.rotate(
-                  angle: -0.09,
-                  child: Container(
-                    width: 72,
-                    height: 94,
-                    decoration: BoxDecoration(
-                      color: receiptColor.withValues(alpha: 0.16),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.18),
-                      ),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: List.generate(
-                        4,
-                        (index) => Container(
-                          width: index == 3 ? 30 : 44,
-                          height: 4,
-                          margin: const EdgeInsets.symmetric(vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(
-                              alpha: index == 3 ? 0.55 : 0.28,
-                            ),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
               if (showBackButton)
                 SafeArea(
                   child: Padding(
@@ -108,7 +58,7 @@ class LoginHeader extends StatelessWidget {
               Align(
                 alignment: Alignment.centerLeft,
                 child: Padding(
-                  padding: const EdgeInsets.only(left: 28, right: 118),
+                  padding: const EdgeInsets.symmetric(horizontal: 28),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,

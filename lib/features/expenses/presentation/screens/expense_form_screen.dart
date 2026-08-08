@@ -3,13 +3,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:oh_expenses_app/config/config.dart';
+import 'package:oh_expenses_app/features/config/config.dart';
+import 'package:oh_expenses_app/features/expenses/domain/entities/expense_draft.dart';
+import 'package:oh_expenses_app/features/expenses/domain/entities/local_expense.dart';
 import 'package:oh_expenses_app/features/expenses/domain/entities/ocr_expense_result.dart';
+import 'package:oh_expenses_app/features/expenses/presentation/providers/expenses_provider.dart';
 import 'package:oh_expenses_app/features/expenses/presentation/providers/ocr_provider.dart';
 import 'package:oh_expenses_app/features/expenses/utils/expense_amount_validator.dart';
+import 'package:oh_expenses_app/features/expenses/utils/expense_amount_sync.dart';
 import 'package:oh_expenses_app/features/expenses/utils/money_utils.dart';
+import 'package:oh_expenses_app/features/shared/shared.dart';
 
 class ExpenseFormScreen extends ConsumerStatefulWidget {
-  const ExpenseFormScreen({super.key});
+  final LocalExpense? expense;
+
+  const ExpenseFormScreen({super.key, this.expense});
 
   @override
   ConsumerState<ExpenseFormScreen> createState() => _ExpenseFormScreenState();
@@ -27,31 +35,63 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
   late TextEditingController _igvController;
   late TextEditingController _totalController;
   String? _amountsError;
+  String? _saveError;
+  String? _editImagePath;
+  bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
     final ocrState = ref.read(ocrProvider);
     final result = ocrState.result;
+    final expense = widget.expense;
 
-    _rucController = TextEditingController(text: result?.ruc ?? '');
-    _businessNameController = TextEditingController(
-      text: result?.businessName ?? '',
+    _rucController = TextEditingController(
+      text: expense?.ruc ?? result?.ruc ?? '',
     );
-    _typeController = TextEditingController(text: result?.type ?? '');
-    _dateController = TextEditingController(text: result?.date ?? '');
-    _serialController = TextEditingController(text: result?.serialNumber ?? '');
+    _businessNameController = TextEditingController(
+      text: expense?.businessName ?? result?.businessName ?? '',
+    );
+    _typeController = TextEditingController(
+      text: expense?.documentType ?? result?.type ?? '',
+    );
+    _dateController = TextEditingController(
+      text: expense?.date ?? result?.date ?? '',
+    );
+    _serialController = TextEditingController(
+      text: expense?.documentNumber ?? result?.serialNumber ?? '',
+    );
     _subtotalController = TextEditingController(
-      text: (result?.subtotal ?? 0) > 0
+      text: expense != null
+          ? expense.subtotal.toStringAsFixed(2)
+          : (result?.subtotal ?? 0) > 0
           ? result!.subtotal.toStringAsFixed(2)
           : '',
     );
     _igvController = TextEditingController(
-      text: result == null ? '' : result.igv.toStringAsFixed(2),
+      text: expense != null
+          ? expense.igv.toStringAsFixed(2)
+          : result == null
+          ? ''
+          : result.igv.toStringAsFixed(2),
     );
     _totalController = TextEditingController(
-      text: (result?.total ?? 0) > 0 ? result!.total.toStringAsFixed(2) : '',
+      text: expense != null
+          ? expense.total.toStringAsFixed(2)
+          : (result?.total ?? 0) > 0
+          ? result!.total.toStringAsFixed(2)
+          : '',
     );
+    if (expense != null && expense.receiptRelativePath.isNotEmpty) {
+      _loadEditImage(expense.receiptRelativePath);
+    }
+  }
+
+  Future<void> _loadEditImage(String relativePath) async {
+    final path = await ref
+        .read(localExpensesRepositoryProvider)
+        .resolveReceiptPath(relativePath);
+    if (mounted) setState(() => _editImagePath = path);
   }
 
   @override
@@ -67,17 +107,31 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
     super.dispose();
   }
 
-  void _saveExpense() {
+  Future<void> _saveExpense() async {
     FocusScope.of(context).unfocus();
 
-    if (!_formKey.currentState!.validate()) return;
+    if (_isSaving || !_formKey.currentState!.validate()) return;
 
     final result = ref.read(ocrProvider).result;
+    final imagePath = widget.expense == null
+        ? ref.read(ocrProvider).imagePath
+        : _editImagePath;
+    final settings = ref.read(taxSettingsProvider);
+    final taxTreatment =
+        widget.expense?.taxTreatment ??
+        result?.taxTreatment ??
+        ExpenseTaxTreatment.unknown;
+    final ratePercentage =
+        widget.expense?.taxRatePercentage ?? settings.ratePercentage;
+    final subtotalCents = MoneyUtils.parseCents(_subtotalController.text);
+    final igvCents = MoneyUtils.parseCents(_igvController.text);
+    final totalCents = MoneyUtils.parseCents(_totalController.text);
     final validation = ExpenseAmountValidator.validate(
       subtotal: MoneyUtils.parse(_subtotalController.text),
       igv: MoneyUtils.parse(_igvController.text),
       total: MoneyUtils.parse(_totalController.text),
-      taxTreatment: result?.taxTreatment ?? ExpenseTaxTreatment.unknown,
+      taxTreatment: taxTreatment,
+      ratePercentage: ratePercentage,
     );
 
     if (!validation.isValid) {
@@ -85,12 +139,84 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
       return;
     }
 
-    setState(() => _amountsError = null);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Gasto guardado exitosamente')),
-    );
-    ref.read(ocrProvider.notifier).reset();
-    context.pop(); // Go back to home
+    if ((widget.expense == null && imagePath == null) ||
+        subtotalCents == null ||
+        igvCents == null ||
+        totalCents == null) {
+      setState(
+        () => _saveError = 'No se pudo preparar el gasto para guardarlo.',
+      );
+      return;
+    }
+
+    setState(() {
+      _amountsError = null;
+      _saveError = null;
+      _isSaving = true;
+    });
+
+    try {
+      final accountScope = await ref.read(currentAccountScopeProvider.future);
+      if (accountScope == null) {
+        throw CustomError('No se encontró el perfil local del usuario.');
+      }
+
+      final draft = ExpenseDraft(
+        ruc: _rucController.text.trim(),
+        businessName: _businessNameController.text.trim(),
+        documentType: _typeController.text.trim(),
+        documentNumber: _serialController.text.trim(),
+        date: _dateController.text.trim(),
+        subtotalCents: subtotalCents,
+        igvCents: igvCents,
+        totalCents: totalCents,
+        taxTreatment: taxTreatment,
+        taxId: widget.expense?.taxId ?? settings.taxId,
+        taxName: widget.expense?.taxName ?? settings.taxName,
+        taxRatePercentage: ratePercentage,
+      );
+
+      final repository = ref.read(localExpensesRepositoryProvider);
+      final expense = widget.expense == null
+          ? await repository.saveExpense(
+              draft: draft,
+              sourceImagePath: imagePath!,
+              accountScope: accountScope,
+            )
+          : await repository.updateExpense(
+              expense: widget.expense!,
+              draft: draft,
+            );
+      final wasSynced = await ref
+          .read(expenseSyncProvider.notifier)
+          .syncExpense(expense);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            wasSynced
+                ? 'Gasto ${widget.expense == null ? 'guardado' : 'actualizado'} y sincronizado con Odoo'
+                : 'Gasto ${widget.expense == null ? 'guardado' : 'actualizado'} localmente; sincronización pendiente',
+          ),
+        ),
+      );
+      if (widget.expense == null) ref.read(ocrProvider.notifier).reset();
+      final updated = await repository.getExpense(
+        expense.id,
+        expense.accountScope,
+      );
+      if (!mounted) return;
+      context.pop(widget.expense == null ? null : updated ?? expense);
+    } on CustomError catch (error) {
+      if (mounted) setState(() => _saveError = error.message);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _saveError = 'No se pudo guardar el gasto localmente.');
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
   }
 
   void _showFullScreenImage(String imagePath) {
@@ -125,31 +251,45 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen(ocrProvider, (previous, next) {
-      if (previous?.isLoading == true && next.isLoading == false) {
-        if (next.result != null) {
-          final result = next.result!;
-          _rucController.text = result.ruc;
-          _businessNameController.text = result.businessName;
-          _typeController.text = result.type;
-          _dateController.text = result.date;
-          _serialController.text = result.serialNumber;
-          _subtotalController.text = result.subtotal > 0
-              ? result.subtotal.toStringAsFixed(2)
-              : '';
-          _igvController.text = result.igv > 0
-              ? result.igv.toStringAsFixed(2)
-              : '0.00';
-          _totalController.text = result.total > 0
-              ? result.total.toStringAsFixed(2)
-              : '';
+    if (widget.expense == null) {
+      ref.listen(ocrProvider, (previous, next) {
+        if (previous?.isLoading == true && next.isLoading == false) {
+          if (next.result != null) {
+            final result = next.result!;
+            _rucController.text = result.ruc;
+            _businessNameController.text = result.businessName;
+            _typeController.text = result.type;
+            _dateController.text = result.date;
+            _serialController.text = result.serialNumber;
+            _subtotalController.text = result.subtotal > 0
+                ? result.subtotal.toStringAsFixed(2)
+                : '';
+            _igvController.text = result.igv > 0
+                ? result.igv.toStringAsFixed(2)
+                : '0.00';
+            _totalController.text = result.total > 0
+                ? result.total.toStringAsFixed(2)
+                : '';
+          }
         }
-      }
-    });
+      });
+    }
 
     final ocrState = ref.watch(ocrProvider);
+    final taxSettings = ref.watch(taxSettingsProvider);
+    final taxTreatment =
+        widget.expense?.taxTreatment ??
+        ocrState.result?.taxTreatment ??
+        ExpenseTaxTreatment.unknown;
+    final effectiveTaxName = widget.expense?.taxName ?? taxSettings.taxName;
+    final effectiveTaxRate =
+        widget.expense?.taxRatePercentage ?? taxSettings.ratePercentage;
+    final previewImagePath = widget.expense == null
+        ? ocrState.imagePath
+        : _editImagePath;
+    final usesTotalAsAnchor = taxTreatment != ExpenseTaxTreatment.mixed;
 
-    if (ocrState.isLoading) {
+    if (widget.expense == null && ocrState.isLoading) {
       return Scaffold(
         backgroundColor: paperColor,
         body: Center(
@@ -178,13 +318,17 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
       );
     }
 
-    if (ocrState.isBlocked) {
+    if (widget.expense == null && ocrState.isBlocked) {
       return _buildBlockedState(ocrState.error);
     }
 
     return Scaffold(
       backgroundColor: paperColor,
-      appBar: AppBar(title: const Text('Registrar gasto')),
+      appBar: AppBar(
+        title: Text(
+          widget.expense == null ? 'Registrar gasto' : 'Editar gasto',
+        ),
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
         child: Form(
@@ -192,23 +336,23 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (ocrState.error != null)
+              if (widget.expense == null && ocrState.error != null)
                 _buildNotice(
                   message: ocrState.error!,
                   color: dangerColor,
                   icon: Icons.error_outline,
                 ),
 
-              if (ocrState.warnings.isNotEmpty)
+              if (widget.expense == null && ocrState.warnings.isNotEmpty)
                 _buildNotice(
                   message: ocrState.warnings.join('\n'),
                   color: warningColor,
                   icon: Icons.warning_amber_rounded,
                 ),
 
-              if (ocrState.imagePath != null)
+              if (previewImagePath != null)
                 GestureDetector(
-                  onTap: () => _showFullScreenImage(ocrState.imagePath!),
+                  onTap: () => _showFullScreenImage(previewImagePath),
                   child: Container(
                     margin: const EdgeInsets.only(bottom: 18),
                     height: 204,
@@ -217,7 +361,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
                       borderRadius: BorderRadius.circular(26),
                       border: Border.all(color: lineColor),
                       image: DecorationImage(
-                        image: FileImage(File(ocrState.imagePath!)),
+                        image: FileImage(File(previewImagePath)),
                         fit: BoxFit.cover,
                       ),
                       boxShadow: [
@@ -250,16 +394,11 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
               _buildSection(
                 title: 'Comercio',
                 children: [
-                  _buildTextField(
-                    controller: _rucController,
-                    label: 'RUC',
-                    icon: Icons.business,
-                  ),
+                  _buildTextField(controller: _rucController, label: 'RUC'),
                   const SizedBox(height: 16),
                   _buildTextField(
                     controller: _businessNameController,
                     label: 'Razón Social',
-                    icon: Icons.storefront,
                   ),
                 ],
               ),
@@ -271,20 +410,14 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
                   _buildTextField(
                     controller: _typeController,
                     label: 'Tipo (Factura, Boleta...)',
-                    icon: Icons.receipt_long,
                   ),
                   const SizedBox(height: 16),
                   _buildTextField(
                     controller: _serialController,
                     label: 'Serie y Número',
-                    icon: Icons.numbers,
                   ),
                   const SizedBox(height: 16),
-                  _buildTextField(
-                    controller: _dateController,
-                    label: 'Fecha',
-                    icon: Icons.calendar_today,
-                  ),
+                  _buildTextField(controller: _dateController, label: 'Fecha'),
                 ],
               ),
               const SizedBox(height: 20),
@@ -292,6 +425,24 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
               _buildSection(
                 title: 'Montos',
                 children: [
+                  if (_saveError != null)
+                    _buildNotice(
+                      message: _saveError!,
+                      color: dangerColor,
+                      icon: Icons.save_outlined,
+                    ),
+                  Text(
+                    effectiveTaxName == null
+                        ? 'Cálculo automático con IGV ${effectiveTaxRate.toStringAsFixed(2)}%.'
+                        : 'Cálculo automático con $effectiveTaxName '
+                              '(${effectiveTaxRate.toStringAsFixed(2)}%).',
+                    style: const TextStyle(
+                      color: mutedInkColor,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   if (_amountsError != null)
                     _buildNotice(
                       message: _amountsError!,
@@ -302,11 +453,11 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
                   _buildTextField(
                     controller: _subtotalController,
                     label: 'Subtotal',
-                    icon: Icons.calculate_outlined,
                     prefixText: 'S/ ',
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
                     ),
+                    readOnly: usesTotalAsAnchor,
                     onChanged: (_) => _clearAmountsError(),
                     validator: (value) =>
                         _validateMoneyField(value, label: 'Subtotal'),
@@ -315,13 +466,13 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
                   _buildTextField(
                     controller: _igvController,
                     label: 'IGV',
-                    icon: Icons.account_balance_wallet_outlined,
                     prefixText: 'S/ ',
                     helperText:
-                        'Usualmente 18%; usa 0.00 si es exonerado o inafecto.',
+                        'Se calcula desde el total; es 0.00 si es exonerado o inafecto.',
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
                     ),
+                    readOnly: usesTotalAsAnchor,
                     onChanged: (_) => _clearAmountsError(),
                     validator: (value) => _validateMoneyField(
                       value,
@@ -333,12 +484,17 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
                   _buildTextField(
                     controller: _totalController,
                     label: 'Total',
-                    icon: Icons.monetization_on_outlined,
                     prefixText: 'S/ ',
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
                     ),
-                    onChanged: (_) => _clearAmountsError(),
+                    helperText: usesTotalAsAnchor
+                        ? 'Monto principal para calcular subtotal e impuesto.'
+                        : 'Operación mixta: revisa las bases e impuesto detectados.',
+                    onChanged: (_) {
+                      _clearAmountsError();
+                      if (usesTotalAsAnchor) _syncAmountsFromTotal();
+                    },
                     validator: (value) =>
                         _validateMoneyField(value, label: 'Total'),
                   ),
@@ -347,7 +503,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
               const SizedBox(height: 32),
 
               ElevatedButton(
-                onPressed: _saveExpense,
+                onPressed: _isSaving ? null : _saveExpense,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: inkColor,
                   foregroundColor: Colors.white,
@@ -357,10 +513,24 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
                   ),
                   elevation: 0,
                 ),
-                child: const Text(
-                  'Guardar gasto',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-                ),
+                child: _isSaving
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2.4,
+                        ),
+                      )
+                    : Text(
+                        widget.expense == null
+                            ? 'Guardar gasto'
+                            : 'Guardar cambios',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
               ),
               const SizedBox(height: 24),
             ],
@@ -410,22 +580,22 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
   Widget _buildTextField({
     required TextEditingController controller,
     required String label,
-    required IconData icon,
     TextInputType keyboardType = TextInputType.text,
     String? Function(String?)? validator,
     String? prefixText,
     String? helperText,
     ValueChanged<String>? onChanged,
+    bool readOnly = false,
   }) {
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
       validator: validator,
       onChanged: onChanged,
+      readOnly: readOnly,
       decoration: InputDecoration(
         labelText: label,
         helperText: helperText,
-        prefixIcon: Icon(icon, color: mutedInkColor),
         prefixText: prefixText,
         prefixStyle: const TextStyle(
           color: inkColor,
@@ -469,6 +639,29 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
     if (_amountsError != null) setState(() => _amountsError = null);
   }
 
+  void _syncAmountsFromTotal() {
+    final total = MoneyUtils.parse(_totalController.text);
+    final treatment =
+        widget.expense?.taxTreatment ??
+        ref.read(ocrProvider).result?.taxTreatment ??
+        ExpenseTaxTreatment.unknown;
+    final isTaxFree =
+        treatment == ExpenseTaxTreatment.exempt ||
+        treatment == ExpenseTaxTreatment.unaffected;
+    final ratePercentage = isTaxFree
+        ? 0.0
+        : widget.expense?.taxRatePercentage ??
+              ref.read(taxSettingsProvider).ratePercentage;
+    final amounts = ExpenseAmountSync.from(
+      anchorValue: total,
+      anchor: ExpenseAnchor.total,
+      ratePercentage: ratePercentage,
+    );
+
+    _subtotalController.text = amounts?.subtotal.toStringAsFixed(2) ?? '';
+    _igvController.text = amounts?.igv.toStringAsFixed(2) ?? '';
+  }
+
   Widget _buildNotice({
     required String message,
     required Color color,
@@ -502,7 +695,11 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
   Widget _buildBlockedState(String? error) {
     return Scaffold(
       backgroundColor: paperColor,
-      appBar: AppBar(title: const Text('Registrar gasto')),
+      appBar: AppBar(
+        title: Text(
+          widget.expense == null ? 'Registrar gasto' : 'Editar gasto',
+        ),
+      ),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),

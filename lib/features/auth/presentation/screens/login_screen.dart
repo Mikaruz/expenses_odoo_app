@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:oh_expenses_app/config/config.dart';
 import 'package:oh_expenses_app/features/auth/presentation/presentation.dart';
 import 'package:oh_expenses_app/features/shared/shared.dart';
@@ -55,7 +54,7 @@ class _LoginFooter extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.only(bottom: 10),
         child: Text(
-          '',
+          '1.0.0',
           style: TextStyle(color: mutedInkColor.withValues(alpha: 0.78)),
         ),
       ),
@@ -78,6 +77,7 @@ class _LoginFormState extends ConsumerState<_LoginForm> {
   final KeyValueStorageService _storage = KeyValueStorageServiceImpl();
   String _odooUrl = '';
   String _database = '';
+  bool _connectionValidated = false;
 
   @override
   void initState() {
@@ -97,12 +97,15 @@ class _LoginFormState extends ConsumerState<_LoginForm> {
   Future<void> _loadOdooSettings() async {
     final odooUrl = await _storage.getValue<String>('odooUrl');
     final database = await _storage.getValue<String>('odooDatabase');
+    final connectionValidated =
+        await _storage.getValue<bool>('odooConnectionValidated') ?? false;
 
     if (!mounted) return;
 
     setState(() {
       _odooUrl = odooUrl ?? '';
       _database = database ?? '';
+      _connectionValidated = connectionValidated;
     });
   }
 
@@ -123,6 +126,9 @@ class _LoginFormState extends ConsumerState<_LoginForm> {
           builder: (_) => _OdooSettingsSheet(
             initialOdooUrl: _odooUrl,
             initialDatabase: _database,
+            onValidateConnection: (odooUrl, database) => ref
+                .read(authProvider.notifier)
+                .validateConnection(odooUrl, database),
           ),
         );
 
@@ -131,6 +137,7 @@ class _LoginFormState extends ConsumerState<_LoginForm> {
     setState(() {
       _odooUrl = result.odooUrl;
       _database = result.database;
+      _connectionValidated = true;
     });
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -153,7 +160,7 @@ class _LoginFormState extends ConsumerState<_LoginForm> {
     }
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 18, 24, 14),
+      padding: const EdgeInsets.fromLTRB(24, 36, 24, 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -169,13 +176,19 @@ class _LoginFormState extends ConsumerState<_LoginForm> {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: mainColor.withValues(alpha: 0.10),
+                    color: (_connectionValidated ? successColor : mainColor)
+                        .withValues(alpha: 0.10),
                     borderRadius: BorderRadius.circular(14),
                   ),
-                  child: const Icon(Icons.settings_outlined, color: mainColor),
+                  child: Icon(
+                    _connectionValidated
+                        ? Icons.cloud_done_outlined
+                        : Icons.settings_outlined,
+                    color: _connectionValidated ? successColor : mainColor,
+                  ),
                 ),
                 const SizedBox(width: 12),
-                const Expanded(
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -189,8 +202,15 @@ class _LoginFormState extends ConsumerState<_LoginForm> {
                       ),
                       SizedBox(height: 2),
                       Text(
-                        'URL y base de datos',
-                        style: TextStyle(color: mutedInkColor, fontSize: 12),
+                        _connectionValidated && _database.isNotEmpty
+                            ? _database
+                            : 'Configura y valida la conexión',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: mutedInkColor,
+                          fontSize: 12,
+                        ),
                       ),
                     ],
                   ),
@@ -236,18 +256,6 @@ class _LoginFormState extends ConsumerState<_LoginForm> {
                 ? formState.password.errorMessage
                 : null,
           ),
-          const SizedBox(height: 12),
-          Align(
-            alignment: Alignment.centerRight,
-            child: GestureDetector(
-              onTap: () => context.push('/forget-password'),
-              child: Text(
-                '¿Olvidaste tu contraseña?',
-                style: TextStyle(color: inkColor, fontWeight: FontWeight.w700),
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
           ErrorMessage(errorMessage: errorMessage, clearError: clearError),
           const SizedBox(height: 16),
           LoginButton(
@@ -264,10 +272,13 @@ class _LoginFormState extends ConsumerState<_LoginForm> {
 class _OdooSettingsSheet extends StatefulWidget {
   final String initialOdooUrl;
   final String initialDatabase;
+  final Future<void> Function(String odooUrl, String database)
+  onValidateConnection;
 
   const _OdooSettingsSheet({
     required this.initialOdooUrl,
     required this.initialDatabase,
+    required this.onValidateConnection,
   });
 
   @override
@@ -279,6 +290,7 @@ class _OdooSettingsSheetState extends State<_OdooSettingsSheet> {
   late final TextEditingController databaseController;
   final KeyValueStorageService _storage = KeyValueStorageServiceImpl();
   bool isSaving = false;
+  String? errorMessage;
 
   @override
   void initState() {
@@ -316,10 +328,31 @@ class _OdooSettingsSheetState extends State<_OdooSettingsSheet> {
       return;
     }
 
-    setState(() => isSaving = true);
+    setState(() {
+      isSaving = true;
+      errorMessage = null;
+    });
 
-    await _storage.setKeyValue('odooUrl', odooUrl.value.trim());
-    await _storage.setKeyValue('odooDatabase', database);
+    try {
+      await widget.onValidateConnection(odooUrl.value.trim(), database);
+      await _storage.setKeyValue('odooUrl', odooUrl.value.trim());
+      await _storage.setKeyValue('odooDatabase', database);
+      await _storage.setKeyValue('odooConnectionValidated', true);
+    } on CustomError catch (error) {
+      if (!mounted) return;
+      setState(() {
+        isSaving = false;
+        errorMessage = error.message;
+      });
+      return;
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        isSaving = false;
+        errorMessage = 'No se pudo conectar con el servidor Odoo.';
+      });
+      return;
+    }
 
     if (!mounted) return;
 
@@ -373,10 +406,10 @@ class _OdooSettingsSheetState extends State<_OdooSettingsSheet> {
             ),
             const SizedBox(height: 6),
             const Text(
-              'Estos datos se usarán para autenticar por JSON-RPC en Odoo 19.',
+              'Ingresa estos datos para conectarse con el servidor.',
               style: TextStyle(color: mutedInkColor, height: 1.35),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
             CustomTextField(
               controller: odooUrlController,
               label: 'URL del servidor',
@@ -392,8 +425,41 @@ class _OdooSettingsSheetState extends State<_OdooSettingsSheet> {
               onFieldSubmitted: (_) => _save(),
             ),
             const SizedBox(height: 20),
+            if (errorMessage != null) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: dangerColor.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: dangerColor.withValues(alpha: 0.22),
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      color: dangerColor,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        errorMessage!,
+                        style: const TextStyle(
+                          color: dangerColor,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+            ],
             LoginButton(
-              label: 'Guardar configuración',
+              label: 'Validar y guardar',
               isLoading: isSaving,
               onPressed: _save,
             ),

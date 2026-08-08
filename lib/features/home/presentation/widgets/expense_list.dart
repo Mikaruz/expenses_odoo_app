@@ -10,48 +10,44 @@ class ExpenseList extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(expensesProvider);
+    final expensesAsync = ref.watch(expensesProvider);
 
-    if (state.isLoading && state.expenses.isEmpty) {
-      return const Padding(
+    return expensesAsync.when(
+      loading: () => const Padding(
         padding: EdgeInsets.symmetric(vertical: 36),
         child: Center(child: CircularProgressIndicator(color: mainColor)),
-      );
-    }
-
-    if (state.errorMessage.isNotEmpty && state.expenses.isEmpty) {
-      return _ExpenseListMessage(
-        icon: Icons.cloud_off_outlined,
-        title: 'No se pudieron cargar tus gastos',
-        message: state.errorMessage,
+      ),
+      error: (_, _) => _ExpenseListMessage(
+        icon: Icons.storage_outlined,
+        title: 'No se pudieron leer tus gastos',
+        message: 'Revisa el almacenamiento local e inténtalo nuevamente.',
         actionLabel: 'Reintentar',
-        onAction: () => ref.read(expensesProvider.notifier).loadExpenses(),
-      );
-    }
+        onAction: () => ref.invalidate(expensesProvider),
+      ),
+      data: (expenses) {
+        if (expenses.isEmpty) {
+          return const _ExpenseListMessage(
+            icon: Icons.receipt_long_outlined,
+            title: 'Sin gastos registrados',
+            message:
+                'Los comprobantes que guardes aparecerán aquí, incluso sin conexión.',
+          );
+        }
 
-    if (state.expenses.isEmpty) {
-      return const _ExpenseListMessage(
-        icon: Icons.receipt_long_outlined,
-        title: 'Sin gastos registrados',
-        message: 'Cuando registres gastos en Odoo aparecerán aquí.',
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.only(top: 8, bottom: 96),
-      physics: const NeverScrollableScrollPhysics(),
-      shrinkWrap: true,
-      itemCount: state.expenses.length,
-      itemBuilder: (context, index) {
-        final expense = state.expenses[index];
-        return ExpenseItem(
-          title: expense.name,
-          date: expense.date.isEmpty ? 'Sin fecha' : expense.date,
-          amount: expense.totalAmount,
-          status: mapExpenseStatus(expense.state),
-          statusLabel: mapExpenseStatusLabel(expense.state),
-          onTap: () {
-            context.push('/expense-detail', extra: expense);
+        return ListView.builder(
+          padding: const EdgeInsets.only(top: 8, bottom: 96),
+          physics: const NeverScrollableScrollPhysics(),
+          shrinkWrap: true,
+          itemCount: expenses.length,
+          itemBuilder: (context, index) {
+            final expense = expenses[index];
+            return ExpenseItem(
+              title: expense.displayName,
+              date: expense.date.isEmpty ? 'Sin fecha' : expense.date,
+              amount: expense.total,
+              status: expense.syncStatus,
+              onTap: () => context.push('/expense-detail', extra: expense),
+            );
           },
         );
       },

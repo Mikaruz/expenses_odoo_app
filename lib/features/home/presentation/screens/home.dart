@@ -9,26 +9,31 @@ import 'package:oh_expenses_app/features/expenses/presentation/providers/ocr_pro
 import 'package:image_picker/image_picker.dart';
 import 'package:go_router/go_router.dart';
 
-class HomePage extends ConsumerWidget {
+class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends ConsumerState<HomePage> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final sessionId = ref.read(authProvider).user?.sessionId ?? '';
+      if (sessionId.isNotEmpty) {
+        ref.read(expenseSyncProvider.notifier).syncAll();
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
+    final syncState = ref.watch(expenseSyncProvider);
     final userName = authState.user?.name ?? 'Usuario';
-
-    ref.listen(authProvider, (previous, next) {
-      if (previous?.user?.uid != next.user?.uid && next.user != null) {
-        ref.read(expensesProvider.notifier).loadExpenses();
-      }
-    });
-
-    Future.microtask(() {
-      final expensesState = ref.read(expensesProvider);
-      if (!expensesState.isLoading && !expensesState.hasLoaded) {
-        ref.read(expensesProvider.notifier).loadExpenses();
-      }
-    });
 
     return Scaffold(
       backgroundColor: paperColor,
@@ -61,10 +66,33 @@ class HomePage extends ConsumerWidget {
                       ),
                     ),
                   ),
-                  TextButton(
-                    onPressed: () =>
-                        ref.read(expensesProvider.notifier).loadExpenses(),
-                    child: const Text('Actualizar'),
+                  TextButton.icon(
+                    onPressed: syncState.isSyncing
+                        ? null
+                        : () async {
+                            await ref
+                                .read(expenseSyncProvider.notifier)
+                                .syncAll();
+                            if (!context.mounted) return;
+                            final message = ref
+                                .read(expenseSyncProvider)
+                                .message;
+                            if (message.isNotEmpty) {
+                              ScaffoldMessenger.of(
+                                context,
+                              ).showSnackBar(SnackBar(content: Text(message)));
+                            }
+                          },
+                    icon: syncState.isSyncing
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.sync_rounded, size: 18),
+                    label: Text(
+                      syncState.isSyncing ? 'Sincronizando' : 'Sincronizar',
+                    ),
                   ),
                 ],
               ),

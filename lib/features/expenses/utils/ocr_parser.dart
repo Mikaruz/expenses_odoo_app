@@ -1,8 +1,9 @@
 import 'package:oh_expenses_app/features/expenses/domain/entities/ocr_expense_result.dart';
+import 'package:oh_expenses_app/features/expenses/utils/expense_amount_sync.dart';
 import 'package:oh_expenses_app/features/expenses/utils/money_utils.dart';
 
 class OcrParser {
-  static const double _igvRate = 0.18;
+  static const double defaultTaxRatePercentage = 18.0;
 
   // Acepta RUC con posibles separadores o errores OCR comunes:
   // 20O12345678 -> 20012345678
@@ -30,7 +31,13 @@ class OcrParser {
     caseSensitive: false,
   );
 
-  static OcrExpenseResult parse(String text) {
+  static OcrExpenseResult parse(
+    String text, {
+    double ratePercentage = defaultTaxRatePercentage,
+  }) {
+    final effectiveRate = ratePercentage.isFinite && ratePercentage >= 0
+        ? ratePercentage
+        : defaultTaxRatePercentage;
     final normalizedText = _normalizeText(text);
 
     final lines = normalizedText
@@ -52,14 +59,48 @@ class OcrParser {
     final total = _extractTotal(lines);
     final taxTreatment = _extractTaxTreatment(lines, upperText);
     final explicitIgv = _extractExplicitIgv(lines);
-    final igv = _extractIgv(lines, total, upperText, taxTreatment, explicitIgv);
-    final subtotalExtraction = _extractSubtotal(
-      lines,
-      total: total,
-      igv: igv,
-      taxTreatment: taxTreatment,
-      upperText: upperText,
-    );
+    final isTaxFree =
+        taxTreatment == ExpenseTaxTreatment.exempt ||
+        taxTreatment == ExpenseTaxTreatment.unaffected;
+    final canUseTotalAsAnchor =
+        total > 0 &&
+        taxTreatment != ExpenseTaxTreatment.mixed &&
+        _canDeriveAmount(upperText);
+
+    double igv;
+    _SubtotalExtraction subtotalExtraction;
+    var igvWasInferred = false;
+
+    if (canUseTotalAsAnchor) {
+      final amounts = ExpenseAmountSync.from(
+        anchorValue: total,
+        anchor: ExpenseAnchor.total,
+        ratePercentage: isTaxFree ? 0 : effectiveRate,
+      )!;
+      igv = amounts.igv;
+      subtotalExtraction = _SubtotalExtraction(
+        value: amounts.subtotal,
+        wasInferred: true,
+      );
+      igvWasInferred = !isTaxFree;
+    } else {
+      igv = _extractIgv(
+        lines,
+        total,
+        upperText,
+        taxTreatment,
+        explicitIgv,
+        effectiveRate,
+      );
+      subtotalExtraction = _extractSubtotal(
+        lines,
+        total: total,
+        igv: igv,
+        taxTreatment: taxTreatment,
+        upperText: upperText,
+      );
+      igvWasInferred = explicitIgv == null && igv > 0;
+    }
 
     return OcrExpenseResult(
       ruc: ruc,
@@ -71,7 +112,7 @@ class OcrParser {
       igv: igv,
       total: total,
       taxTreatment: taxTreatment,
-      igvWasInferred: explicitIgv == null && igv > 0,
+      igvWasInferred: igvWasInferred,
       subtotalWasInferred: subtotalExtraction.wasInferred,
       rawText: text,
     );
@@ -373,6 +414,9 @@ class OcrParser {
       var score = 100;
 
       if (upper.contains('TOTAL A PAGAR')) score += 90;
+      if (upper.contains('NETO A PAGAR')) score += 85;
+      if (upper.contains('IMPORTE A PAGAR')) score += 80;
+      if (upper.contains('MONTO A PAGAR')) score += 75;
       if (upper.contains('IMPORTE TOTAL')) score += 80;
       if (upper.contains('MONTO TOTAL')) score += 70;
       if (upper.contains('TOTAL VENTA')) score += 60;
@@ -412,6 +456,10 @@ class OcrParser {
           _looksLikeNegativeAmountLine(line) ||
           upper.contains('VUELTO') ||
           upper.contains('CAMBIO') ||
+          upper.contains('EFECTIVO') ||
+          upper.contains('TARJETA') ||
+          upper.contains('PAGO CON') ||
+          upper.contains('RECIBIDO') ||
           upper.contains('DESCUENTO') ||
           upper.contains('DSCTO') ||
           upper.contains('IGV') ||
@@ -437,6 +485,9 @@ class OcrParser {
 
   static bool _looksLikeTotalLine(String upper) {
     return upper.contains('TOTAL A PAGAR') ||
+        upper.contains('NETO A PAGAR') ||
+        upper.contains('IMPORTE A PAGAR') ||
+        upper.contains('MONTO A PAGAR') ||
         upper.contains('IMPORTE TOTAL') ||
         upper.contains('MONTO TOTAL') ||
         upper.contains('TOTAL VENTA') ||
@@ -450,6 +501,10 @@ class OcrParser {
       'SUB TOTAL',
       'TOTAL DESCUENTO',
       'TOTAL DSCTO',
+      'TOTAL ITEMS',
+      'TOTAL ÍTEMS',
+      'TOTAL PRODUCTOS',
+      'CANTIDAD TOTAL',
       'DESCUENTO TOTAL',
       'OP. GRAVADA',
       'OPERACION GRAVADA',
@@ -691,6 +746,7 @@ class OcrParser {
     String upperText,
     ExpenseTaxTreatment taxTreatment,
     double? explicitIgv,
+    double ratePercentage,
   ) {
     if (explicitIgv != null && explicitIgv >= 0) {
       return _round2(explicitIgv);
@@ -703,7 +759,7 @@ class OcrParser {
         taxTreatment == ExpenseTaxTreatment.mixed) {
       final taxableBase = _extractTaxableBase(lines);
       if (taxTreatment == ExpenseTaxTreatment.mixed && taxableBase != null) {
-        return _round2(taxableBase * _igvRate);
+        return _round2(taxableBase * ratePercentage / 100);
       }
 
       return 0.0;
@@ -716,11 +772,12 @@ class OcrParser {
 
     final taxableBase = _extractTaxableBase(lines);
     if (taxableBase != null) {
-      return _round2(taxableBase * _igvRate);
+      return _round2(taxableBase * ratePercentage / 100);
     }
 
     // Solo se infiere desde el total cuando el comprobante declara una operación gravada.
-    return _round2(total * _igvRate / (1 + _igvRate));
+    final factor = ratePercentage / 100;
+    return factor <= 0 ? 0 : _round2(total * factor / (1 + factor));
   }
 
   static double? _extractExplicitIgv(List<String> lines) {
