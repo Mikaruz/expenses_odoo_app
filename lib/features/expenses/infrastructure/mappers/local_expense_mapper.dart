@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+import 'package:oh_expenses_app/features/config/domain/entities/expense_product.dart';
 import 'package:oh_expenses_app/features/expenses/domain/domain.dart';
 import 'package:oh_expenses_app/features/expenses/infrastructure/database/expenses_database.dart';
 
@@ -12,6 +13,10 @@ class LocalExpenseMapper {
       businessName: row.businessName,
       documentType: row.documentType,
       documentNumber: row.documentNumber,
+      productId: row.productId,
+      productName: row.productName == null
+          ? null
+          : ExpenseProduct.normalizeName(row.productName!),
       date: row.expenseDate,
       subtotalCents: row.subtotalCents,
       igvCents: row.igvCents,
@@ -40,6 +45,8 @@ class LocalExpenseMapper {
       businessName: Value(expense.businessName),
       documentType: Value(expense.documentType),
       documentNumber: Value(expense.documentNumber),
+      productId: Value(expense.productId),
+      productName: Value(expense.productName),
       expenseDate: Value(expense.date),
       subtotalCents: expense.subtotalCents,
       igvCents: expense.igvCents,

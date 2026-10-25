@@ -151,11 +151,26 @@ class OcrNotifier extends _$OcrNotifier {
   }
 
   Future<OcrExpenseResult?> _tryRemoteOcr(String imagePath) async {
+    final scanModeNotifier = ref.read(ocrScanModeProvider.notifier);
+    await scanModeNotifier.load();
+    final scanMode = ref.read(ocrScanModeProvider);
+    if (scanMode == OcrScanMode.device) {
+      Logger.info('OCR remoto omitido: modo Dispositivo seleccionado.');
+      return null;
+    }
+
+    await ref.read(authProvider.notifier).ensureOnlineSession();
     final authState = ref.read(authProvider);
     final authentication = authState.user;
     if (authState.isOffline ||
         authentication == null ||
         authentication.sessionId.trim().isEmpty) {
+      if (scanMode == OcrScanMode.odoo) {
+        final message = authState.errorMessage.isNotEmpty
+            ? authState.errorMessage
+            : 'El modo Servidor Odoo requiere una sesión activa y conexión con Odoo.';
+        throw ExpenseOcrRemoteException(message);
+      }
       Logger.info('OCR remoto omitido: no existe una sesión Odoo activa.');
       return null;
     }
@@ -163,6 +178,11 @@ class OcrNotifier extends _$OcrNotifier {
     final odooUrl = await _storage.getValue<String>('odooUrl');
     final database = await _storage.getValue<String>('odooDatabase');
     if (odooUrl == null || database == null || odooUrl.trim().isEmpty) {
+      if (scanMode == OcrScanMode.odoo) {
+        throw const ExpenseOcrRemoteException(
+          'El modo Servidor Odoo requiere configurar la conexión con Odoo.',
+        );
+      }
       Logger.info('OCR remoto omitido: falta configuración de Odoo.');
       return null;
     }
@@ -178,7 +198,7 @@ class OcrNotifier extends _$OcrNotifier {
       Logger.success('OCR de Odoo completado. Total: ${result.total}');
       return result;
     } on ExpenseOcrRemoteException catch (error) {
-      if (error.isConnectivityFailure) {
+      if (error.isConnectivityFailure && scanMode == OcrScanMode.automatic) {
         Logger.warning(
           'OCR de Odoo no disponible; se usará OCR local: ${error.message}',
         );

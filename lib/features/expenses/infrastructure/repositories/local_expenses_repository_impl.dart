@@ -37,7 +37,6 @@ class LocalExpensesRepositoryImpl extends LocalExpensesRepository {
   }) async {
     final localId = _uuid.v4();
     Logger.info('[LocalExpense][$localId] iniciando guardado local');
-
     String? receiptPath;
     try {
       receiptPath = await _receiptStorage.copyReceipt(
@@ -53,6 +52,8 @@ class LocalExpensesRepositoryImpl extends LocalExpensesRepository {
         businessName: draft.businessName,
         documentType: draft.documentType,
         documentNumber: draft.documentNumber,
+        productId: draft.productId,
+        productName: draft.productName,
         date: draft.date,
         subtotalCents: draft.subtotalCents,
         igvCents: draft.igvCents,
@@ -67,7 +68,6 @@ class LocalExpensesRepositoryImpl extends LocalExpensesRepository {
         createdAt: now,
         updatedAt: now,
       );
-
       await _localDatasource.insertExpense(expense);
       Logger.success('[LocalExpense][$localId] guardado con estado pending');
       return expense;
@@ -94,6 +94,8 @@ class LocalExpensesRepositoryImpl extends LocalExpensesRepository {
       businessName: draft.businessName,
       documentType: draft.documentType,
       documentNumber: draft.documentNumber,
+      productId: draft.productId,
+      productName: draft.productName,
       date: draft.date,
       subtotalCents: draft.subtotalCents,
       igvCents: draft.igvCents,
@@ -134,6 +136,8 @@ class LocalExpensesRepositoryImpl extends LocalExpensesRepository {
         businessName: expense.name,
         documentType: expense.category,
         documentNumber: '',
+        productId: expense.productId,
+        productName: expense.category,
         date: expense.date,
         subtotalCents: totalCents,
         igvCents: 0,

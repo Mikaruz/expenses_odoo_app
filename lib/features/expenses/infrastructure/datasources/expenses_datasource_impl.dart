@@ -92,6 +92,7 @@ class ExpensesDatasourceImpl extends ExpensesDatasource {
               'method': 'search_read',
               'args': [],
               'kwargs': {
+                'context': {'lang': 'es_PE'},
                 'domain': [
                   ['employee_id.user_id', '=', userId],
                 ],
@@ -382,16 +383,20 @@ class ExpensesDatasourceImpl extends ExpensesDatasource {
   }
 
   Map<String, Object?> _buildExpenseValues(LocalExpense expense) {
+    if (expense.productId == null || expense.productId! <= 0) {
+      throw CustomError('Selecciona una categoría de gasto.');
+    }
     final appliesTax =
         expense.taxId != null &&
         expense.taxTreatment != ExpenseTaxTreatment.exempt &&
         expense.taxTreatment != ExpenseTaxTreatment.unaffected &&
         expense.taxTreatment != ExpenseTaxTreatment.mixed;
-    // Odoo 19 removed unit_amount; this is the writable receipt total.
+
     final values = <String, Object?>{
       'name': expense.displayName,
       'quantity': 1.0,
       'total_amount_currency': expense.total,
+      'product_id': expense.productId,
       'payment_mode': 'own_account',
       'description': _buildExpenseDescription(expense),
     };

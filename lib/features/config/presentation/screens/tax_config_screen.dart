@@ -15,6 +15,7 @@ class _TaxConfigScreenState extends ConsumerState<TaxConfigScreen> {
   void initState() {
     super.initState();
     Future.microtask(() async {
+      await ref.read(ocrScanModeProvider.notifier).load();
       await ref.read(taxSettingsProvider.notifier).load();
       await ref.read(taxesProvider.notifier).loadTaxes();
     });
@@ -24,6 +25,7 @@ class _TaxConfigScreenState extends ConsumerState<TaxConfigScreen> {
   Widget build(BuildContext context) {
     final taxesState = ref.watch(taxesProvider);
     final settings = ref.watch(taxSettingsProvider);
+    final scanMode = ref.watch(ocrScanModeProvider);
 
     return Scaffold(
       backgroundColor: paperColor,
@@ -33,6 +35,8 @@ class _TaxConfigScreenState extends ConsumerState<TaxConfigScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            _buildScanModeSection(scanMode),
+            const SizedBox(height: 16),
             _buildInfoCard(settings),
             const SizedBox(height: 16),
             Row(
@@ -59,6 +63,67 @@ class _TaxConfigScreenState extends ConsumerState<TaxConfigScreen> {
               _buildNotice(taxesState.errorMessage),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildScanModeSection(OcrScanMode selectedMode) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(8, 16, 8, 8),
+      decoration: BoxDecoration(
+        color: surfaceColor,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: lineColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 8),
+            child: Text(
+              'Modo de escaneo',
+              style: TextStyle(
+                color: inkColor,
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(8, 8, 8, 4),
+            child: Text(
+              'Elige dónde se procesan las imágenes de comprobantes.',
+              style: TextStyle(color: mutedInkColor, height: 1.35),
+            ),
+          ),
+          RadioGroup<OcrScanMode>(
+            groupValue: selectedMode,
+            onChanged: (value) {
+              if (value != null) {
+                ref.read(ocrScanModeProvider.notifier).setMode(value);
+              }
+            },
+            child: Column(
+              children: OcrScanMode.values
+                  .map(
+                    (mode) => RadioListTile<OcrScanMode>(
+                      value: mode,
+                      title: Text(
+                        mode.label,
+                        style: const TextStyle(
+                          color: inkColor,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      subtitle: Text(mode.description),
+                      activeColor: mainColor,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ),
+        ],
       ),
     );
   }

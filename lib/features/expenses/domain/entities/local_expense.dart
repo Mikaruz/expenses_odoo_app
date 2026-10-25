@@ -9,6 +9,8 @@ class LocalExpense {
   final String businessName;
   final String documentType;
   final String documentNumber;
+  final int? productId;
+  final String? productName;
   final String date;
   final int subtotalCents;
   final int igvCents;
@@ -31,6 +33,8 @@ class LocalExpense {
     required this.businessName,
     required this.documentType,
     required this.documentNumber,
+    this.productId,
+    this.productName,
     required this.date,
     required this.subtotalCents,
     required this.igvCents,

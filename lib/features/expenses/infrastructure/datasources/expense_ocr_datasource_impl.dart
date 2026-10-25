@@ -139,7 +139,7 @@ class ExpenseOcrDatasourceImpl implements ExpenseOcrDatasource {
 
   String _idempotencyKey(List<int> bytes) {
     final digest = sha256.convert(bytes).toString();
-    return 'flutter-$digest';
+    return 'flutter-ocr-v2-$digest';
   }
 
   String _serverErrorMessage(DioException error) {

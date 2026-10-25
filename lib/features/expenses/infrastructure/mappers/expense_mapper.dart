@@ -1,4 +1,5 @@
 import 'package:oh_expenses_app/features/expenses/domain/domain.dart';
+import 'package:oh_expenses_app/features/config/domain/entities/expense_product.dart';
 
 class ExpenseMapper {
   static Expense odooJsonToEntity(Map<String, dynamic> json) {
@@ -12,7 +13,8 @@ class ExpenseMapper {
         json['total_amount_currency'] ?? json['total_amount'],
       ),
       currency: _many2OneName(json['currency_id'], fallback: 'PEN'),
-      category: _many2OneName(json['product_id']),
+      category: ExpenseProduct.normalizeName(_many2OneName(json['product_id'])),
+      productId: _many2OneId(json['product_id']),
       description: _stringValue(json['description']),
     );
   }
@@ -39,6 +41,13 @@ class ExpenseMapper {
     }
 
     return _stringValue(value, fallback: fallback);
+  }
+
+  static int? _many2OneId(dynamic value) {
+    if (value is List && value.isNotEmpty) {
+      return int.tryParse(value.first.toString());
+    }
+    return int.tryParse(value?.toString() ?? '');
   }
 }
 

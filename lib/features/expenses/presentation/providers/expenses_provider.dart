@@ -194,12 +194,16 @@ class ExpenseSyncNotifier extends _$ExpenseSyncNotifier {
   );
 
   Future<_OdooSyncConnection?> _loadConnection() async {
-    final user = ref.read(authProvider).user;
-    if (user == null || user.sessionId.trim().isEmpty) {
+    final authNotifier = ref.read(authProvider.notifier);
+    final hasOnlineSession = await authNotifier.ensureOnlineSession();
+    final authState = ref.read(authProvider);
+    final user = authState.user;
+    if (!hasOnlineSession || user == null || user.sessionId.trim().isEmpty) {
       if (ref.mounted) {
-        state = const ExpenseSyncState(
-          message:
-              'La sesión de Odoo no está activa. Cierra sesión e ingresa nuevamente para sincronizar.',
+        state = ExpenseSyncState(
+          message: authState.errorMessage.isNotEmpty
+              ? authState.errorMessage
+              : 'La sesión de Odoo no está activa. Verifica las credenciales y la conexión.',
         );
       }
       return null;

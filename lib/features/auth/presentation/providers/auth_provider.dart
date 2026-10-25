@@ -10,13 +10,22 @@ enum AuthStatus { checking, authenticated, unauthenticated }
 
 @riverpod
 class AuthNotifier extends _$AuthNotifier {
-  late final _authRepository = AuthRepositoryImpl(AuthDatasourceImpl());
-  late final KeyValueStorageService _storage;
+  AuthNotifier({
+    AuthRepository? authRepository,
+    KeyValueStorageService? storage,
+    AuthSecretStorage? secureStorage,
+  }) : _authRepository =
+           authRepository ?? AuthRepositoryImpl(AuthDatasourceImpl()),
+       _storage = storage ?? KeyValueStorageServiceImpl(),
+       _secureStorage = secureStorage ?? SecureAuthStorage();
+
+  final AuthRepository _authRepository;
+  final KeyValueStorageService _storage;
+  final AuthSecretStorage _secureStorage;
+  Future<bool>? _sessionRestore;
 
   @override
   AuthState build() {
-    _storage = KeyValueStorageServiceImpl();
-
     Future.microtask(() => _checkAuthStatus());
     return const AuthState();
   }
@@ -29,6 +38,7 @@ class AuthNotifier extends _$AuthNotifier {
     final email = await _storage.getValue<String>('offlineEmail');
     final odooUrl = await _storage.getValue<String>('odooUrl');
     final database = await _storage.getValue<String>('odooDatabase');
+    if (!ref.mounted) return;
 
     if (uid == null ||
         uid.trim().isEmpty ||
@@ -45,6 +55,7 @@ class AuthNotifier extends _$AuthNotifier {
       Authentication(uid: uid, name: name, email: email ?? '', sessionId: ''),
       isOffline: true,
     );
+    await ensureOnlineSession();
   }
 
   Future<void> login(
@@ -61,7 +72,8 @@ class AuthNotifier extends _$AuthNotifier {
         database,
       );
 
-      // La identidad permite acceso offline; la contraseña no se persiste.
+      // La identidad permite acceso offline; la contraseña se guarda de forma segura
+      // para poder reactivar la sesión cuando la app vuelva a tener conexión.
       await _storage.setKeyValue('username', username);
       await _storage.setKeyValue('odooUrl', odooUrl);
       await _storage.setKeyValue('odooDatabase', database);
@@ -70,7 +82,9 @@ class AuthNotifier extends _$AuthNotifier {
       await _storage.setKeyValue('offlineName', authentication.name);
       await _storage.setKeyValue('offlineEmail', authentication.email);
       await _storage.removeKey('password');
+      await _secureStorage.savePassword(password);
 
+      if (!ref.mounted) return;
       _setLoggedUser(authentication);
     } on CustomError catch (e) {
       Logger.error("Error al iniciar sesión: ${e.message}");
@@ -83,6 +97,66 @@ class AuthNotifier extends _$AuthNotifier {
 
   Future<void> validateConnection(String odooUrl, String database) {
     return _authRepository.validateConnection(odooUrl, database);
+  }
+
+  Future<bool> ensureOnlineSession() async {
+    final pendingRestore = _sessionRestore;
+    if (pendingRestore != null) return pendingRestore;
+
+    final restore = _restoreOnlineSession();
+    _sessionRestore = restore;
+    return restore.whenComplete(() => _sessionRestore = null);
+  }
+
+  Future<bool> _restoreOnlineSession() async {
+    final currentUser = state.user;
+    if (currentUser == null) return false;
+    if (!state.isOffline && currentUser.sessionId.trim().isNotEmpty) {
+      return true;
+    }
+
+    final username =
+        await _storage.getValue<String>('username') ?? currentUser.email;
+    final password = await _secureStorage.readPassword();
+    final odooUrl = await _storage.getValue<String>('odooUrl');
+    final database = await _storage.getValue<String>('odooDatabase');
+    if (!ref.mounted) return false;
+    if (username.trim().isEmpty ||
+        password == null ||
+        password.isEmpty ||
+        odooUrl == null ||
+        odooUrl.trim().isEmpty ||
+        database == null ||
+        database.trim().isEmpty) {
+      _setSessionError(
+        'No hay credenciales guardadas para reactivar la sesión de Odoo. '
+        'Inicia sesión nuevamente.',
+      );
+      return false;
+    }
+
+    try {
+      final authentication = await _authRepository.login(
+        username,
+        password,
+        odooUrl,
+        database,
+      );
+      if (!ref.mounted) return false;
+      _setLoggedUser(authentication);
+      Logger.success('Sesión de Odoo reactivada automáticamente');
+      return true;
+    } on CustomError catch (error) {
+      Logger.warning(
+        'No se pudo reactivar la sesión de Odoo: ${error.message}',
+      );
+      _setSessionError(error.message);
+      return false;
+    } catch (error) {
+      Logger.warning('No se pudo reactivar la sesión de Odoo: $error');
+      _setSessionError('No se pudo reactivar la sesión de Odoo.');
+      return false;
+    }
   }
 
   void _setLoggedUser(Authentication authentication, {bool isOffline = false}) {
@@ -104,6 +178,7 @@ class AuthNotifier extends _$AuthNotifier {
       await _storage.removeKey('offlineUid');
       await _storage.removeKey('offlineName');
       await _storage.removeKey('offlineEmail');
+      await _secureStorage.clearPassword();
     }
 
     Logger.info('Cerrando sesión...');
@@ -124,6 +199,11 @@ class AuthNotifier extends _$AuthNotifier {
       authStatus: AuthStatus.unauthenticated,
       errorMessage: message,
     );
+  }
+
+  void _setSessionError(String message) {
+    if (!ref.mounted) return;
+    state = state.copyWith(errorMessage: message);
   }
 }
 

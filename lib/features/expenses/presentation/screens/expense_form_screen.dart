@@ -34,6 +34,8 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
   late TextEditingController _subtotalController;
   late TextEditingController _igvController;
   late TextEditingController _totalController;
+  int? _selectedProductId;
+  String? _selectedProductName;
   String? _amountsError;
   String? _saveError;
   String? _editImagePath;
@@ -45,6 +47,10 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
     final ocrState = ref.read(ocrProvider);
     final result = ocrState.result;
     final expense = widget.expense;
+    _selectedProductId = expense?.productId;
+    _selectedProductName = expense?.productName == null
+        ? null
+        : ExpenseProduct.normalizeName(expense!.productName!);
 
     _rucController = TextEditingController(
       text: expense?.ruc ?? result?.ruc ?? '',
@@ -85,6 +91,9 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
     if (expense != null && expense.receiptRelativePath.isNotEmpty) {
       _loadEditImage(expense.receiptRelativePath);
     }
+    Future.microtask(
+      () => ref.read(expenseProductsProvider.notifier).loadProducts(),
+    );
   }
 
   Future<void> _loadEditImage(String relativePath) async {
@@ -111,6 +120,11 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
     FocusScope.of(context).unfocus();
 
     if (_isSaving || !_formKey.currentState!.validate()) return;
+
+    if (_selectedProductId == null || _selectedProductId! <= 0) {
+      setState(() => _saveError = 'Selecciona una categoría de gasto.');
+      return;
+    }
 
     final result = ref.read(ocrProvider).result;
     final imagePath = widget.expense == null
@@ -166,6 +180,8 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
         businessName: _businessNameController.text.trim(),
         documentType: _typeController.text.trim(),
         documentNumber: _serialController.text.trim(),
+        productId: _selectedProductId,
+        productName: _selectedProductName,
         date: _dateController.text.trim(),
         subtotalCents: subtotalCents,
         igvCents: igvCents,
@@ -277,6 +293,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
 
     final ocrState = ref.watch(ocrProvider);
     final taxSettings = ref.watch(taxSettingsProvider);
+    final productsState = ref.watch(expenseProductsProvider);
     final taxTreatment =
         widget.expense?.taxTreatment ??
         ocrState.result?.taxTreatment ??
@@ -400,6 +417,8 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
                     controller: _businessNameController,
                     label: 'Razón Social',
                   ),
+                  const SizedBox(height: 16),
+                  _buildProductSelector(productsState),
                 ],
               ),
               const SizedBox(height: 20),
@@ -617,6 +636,73 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
         filled: true,
         fillColor: receiptColor,
       ),
+    );
+  }
+
+  Widget _buildProductSelector(ExpenseProductsState state) {
+    final products = [...state.products];
+    if (_selectedProductId != null &&
+        !products.any((product) => product.id == _selectedProductId)) {
+      products.insert(
+        0,
+        ExpenseProduct(
+          id: _selectedProductId!,
+          name: _selectedProductName ?? 'Categoría seleccionada',
+        ),
+      );
+    }
+    final selectedValue =
+        products.any((product) => product.id == _selectedProductId)
+        ? _selectedProductId
+        : null;
+
+    return DropdownButtonFormField<int>(
+      initialValue: selectedValue,
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: 'Categoría',
+        helperText: state.isLoading && products.isEmpty
+            ? 'Cargando categorías desde Odoo...'
+            : state.errorMessage.isNotEmpty
+            ? state.errorMessage
+            : 'Categoría de gasto de Odoo (product.product).',
+        helperMaxLines: 3,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: lineColor),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: mainColor),
+        ),
+        filled: true,
+        fillColor: receiptColor,
+      ),
+      hint: const Text('Selecciona una categoría'),
+      items: products
+          .map(
+            (product) => DropdownMenuItem<int>(
+              value: product.id,
+              child: Text(product.displayName, overflow: TextOverflow.ellipsis),
+            ),
+          )
+          .toList(),
+      onChanged: products.isEmpty
+          ? null
+          : (productId) {
+              if (productId == null) return;
+              final product = products.firstWhere(
+                (item) => item.id == productId,
+              );
+              setState(() {
+                _selectedProductId = product.id;
+                _selectedProductName = product.name;
+                _saveError = null;
+              });
+            },
+      validator: (value) =>
+          value == null ? 'Selecciona una categoría de gasto.' : null,
     );
   }
 

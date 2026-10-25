@@ -7,6 +7,7 @@ class Expense {
   final double totalAmount;
   final String currency;
   final String category;
+  final int? productId;
   final String description;
 
   const Expense({
@@ -18,6 +19,7 @@ class Expense {
     required this.totalAmount,
     required this.currency,
     required this.category,
+    this.productId,
     required this.description,
   });
 }

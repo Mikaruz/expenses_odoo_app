@@ -86,6 +86,28 @@ class $LocalExpensesTable extends LocalExpenses
     requiredDuringInsert: false,
     defaultValue: const Constant(''),
   );
+  static const VerificationMeta _productIdMeta = const VerificationMeta(
+    'productId',
+  );
+  @override
+  late final GeneratedColumn<int> productId = GeneratedColumn<int>(
+    'product_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _productNameMeta = const VerificationMeta(
+    'productName',
+  );
+  @override
+  late final GeneratedColumn<String> productName = GeneratedColumn<String>(
+    'product_name',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _expenseDateMeta = const VerificationMeta(
     'expenseDate',
   );
@@ -238,6 +260,8 @@ class $LocalExpensesTable extends LocalExpenses
     businessName,
     documentType,
     documentNumber,
+    productId,
+    productName,
     expenseDate,
     subtotalCents,
     igvCents,
@@ -316,6 +340,21 @@ class $LocalExpensesTable extends LocalExpenses
         documentNumber.isAcceptableOrUnknown(
           data['document_number']!,
           _documentNumberMeta,
+        ),
+      );
+    }
+    if (data.containsKey('product_id')) {
+      context.handle(
+        _productIdMeta,
+        productId.isAcceptableOrUnknown(data['product_id']!, _productIdMeta),
+      );
+    }
+    if (data.containsKey('product_name')) {
+      context.handle(
+        _productNameMeta,
+        productName.isAcceptableOrUnknown(
+          data['product_name']!,
+          _productNameMeta,
         ),
       );
     }
@@ -470,6 +509,14 @@ class $LocalExpensesTable extends LocalExpenses
         DriftSqlType.string,
         data['${effectivePrefix}document_number'],
       )!,
+      productId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}product_id'],
+      ),
+      productName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}product_name'],
+      ),
       expenseDate: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}expense_date'],
@@ -539,6 +586,8 @@ class LocalExpenseRow extends DataClass implements Insertable<LocalExpenseRow> {
   final String businessName;
   final String documentType;
   final String documentNumber;
+  final int? productId;
+  final String? productName;
   final String expenseDate;
   final int subtotalCents;
   final int igvCents;
@@ -560,6 +609,8 @@ class LocalExpenseRow extends DataClass implements Insertable<LocalExpenseRow> {
     required this.businessName,
     required this.documentType,
     required this.documentNumber,
+    this.productId,
+    this.productName,
     required this.expenseDate,
     required this.subtotalCents,
     required this.igvCents,
@@ -586,6 +637,12 @@ class LocalExpenseRow extends DataClass implements Insertable<LocalExpenseRow> {
     map['business_name'] = Variable<String>(businessName);
     map['document_type'] = Variable<String>(documentType);
     map['document_number'] = Variable<String>(documentNumber);
+    if (!nullToAbsent || productId != null) {
+      map['product_id'] = Variable<int>(productId);
+    }
+    if (!nullToAbsent || productName != null) {
+      map['product_name'] = Variable<String>(productName);
+    }
     map['expense_date'] = Variable<String>(expenseDate);
     map['subtotal_cents'] = Variable<int>(subtotalCents);
     map['igv_cents'] = Variable<int>(igvCents);
@@ -619,6 +676,12 @@ class LocalExpenseRow extends DataClass implements Insertable<LocalExpenseRow> {
       businessName: Value(businessName),
       documentType: Value(documentType),
       documentNumber: Value(documentNumber),
+      productId: productId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(productId),
+      productName: productName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(productName),
       expenseDate: Value(expenseDate),
       subtotalCents: Value(subtotalCents),
       igvCents: Value(igvCents),
@@ -654,6 +717,8 @@ class LocalExpenseRow extends DataClass implements Insertable<LocalExpenseRow> {
       businessName: serializer.fromJson<String>(json['businessName']),
       documentType: serializer.fromJson<String>(json['documentType']),
       documentNumber: serializer.fromJson<String>(json['documentNumber']),
+      productId: serializer.fromJson<int?>(json['productId']),
+      productName: serializer.fromJson<String?>(json['productName']),
       expenseDate: serializer.fromJson<String>(json['expenseDate']),
       subtotalCents: serializer.fromJson<int>(json['subtotalCents']),
       igvCents: serializer.fromJson<int>(json['igvCents']),
@@ -682,6 +747,8 @@ class LocalExpenseRow extends DataClass implements Insertable<LocalExpenseRow> {
       'businessName': serializer.toJson<String>(businessName),
       'documentType': serializer.toJson<String>(documentType),
       'documentNumber': serializer.toJson<String>(documentNumber),
+      'productId': serializer.toJson<int?>(productId),
+      'productName': serializer.toJson<String?>(productName),
       'expenseDate': serializer.toJson<String>(expenseDate),
       'subtotalCents': serializer.toJson<int>(subtotalCents),
       'igvCents': serializer.toJson<int>(igvCents),
@@ -706,6 +773,8 @@ class LocalExpenseRow extends DataClass implements Insertable<LocalExpenseRow> {
     String? businessName,
     String? documentType,
     String? documentNumber,
+    Value<int?> productId = const Value.absent(),
+    Value<String?> productName = const Value.absent(),
     String? expenseDate,
     int? subtotalCents,
     int? igvCents,
@@ -727,6 +796,8 @@ class LocalExpenseRow extends DataClass implements Insertable<LocalExpenseRow> {
     businessName: businessName ?? this.businessName,
     documentType: documentType ?? this.documentType,
     documentNumber: documentNumber ?? this.documentNumber,
+    productId: productId.present ? productId.value : this.productId,
+    productName: productName.present ? productName.value : this.productName,
     expenseDate: expenseDate ?? this.expenseDate,
     subtotalCents: subtotalCents ?? this.subtotalCents,
     igvCents: igvCents ?? this.igvCents,
@@ -760,6 +831,10 @@ class LocalExpenseRow extends DataClass implements Insertable<LocalExpenseRow> {
       documentNumber: data.documentNumber.present
           ? data.documentNumber.value
           : this.documentNumber,
+      productId: data.productId.present ? data.productId.value : this.productId,
+      productName: data.productName.present
+          ? data.productName.value
+          : this.productName,
       expenseDate: data.expenseDate.present
           ? data.expenseDate.value
           : this.expenseDate,
@@ -802,6 +877,8 @@ class LocalExpenseRow extends DataClass implements Insertable<LocalExpenseRow> {
           ..write('businessName: $businessName, ')
           ..write('documentType: $documentType, ')
           ..write('documentNumber: $documentNumber, ')
+          ..write('productId: $productId, ')
+          ..write('productName: $productName, ')
           ..write('expenseDate: $expenseDate, ')
           ..write('subtotalCents: $subtotalCents, ')
           ..write('igvCents: $igvCents, ')
@@ -820,7 +897,7 @@ class LocalExpenseRow extends DataClass implements Insertable<LocalExpenseRow> {
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     accountScope,
     remoteId,
@@ -828,6 +905,8 @@ class LocalExpenseRow extends DataClass implements Insertable<LocalExpenseRow> {
     businessName,
     documentType,
     documentNumber,
+    productId,
+    productName,
     expenseDate,
     subtotalCents,
     igvCents,
@@ -841,7 +920,7 @@ class LocalExpenseRow extends DataClass implements Insertable<LocalExpenseRow> {
     lastSyncError,
     createdAt,
     updatedAt,
-  );
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -853,6 +932,8 @@ class LocalExpenseRow extends DataClass implements Insertable<LocalExpenseRow> {
           other.businessName == this.businessName &&
           other.documentType == this.documentType &&
           other.documentNumber == this.documentNumber &&
+          other.productId == this.productId &&
+          other.productName == this.productName &&
           other.expenseDate == this.expenseDate &&
           other.subtotalCents == this.subtotalCents &&
           other.igvCents == this.igvCents &&
@@ -876,6 +957,8 @@ class LocalExpensesCompanion extends UpdateCompanion<LocalExpenseRow> {
   final Value<String> businessName;
   final Value<String> documentType;
   final Value<String> documentNumber;
+  final Value<int?> productId;
+  final Value<String?> productName;
   final Value<String> expenseDate;
   final Value<int> subtotalCents;
   final Value<int> igvCents;
@@ -898,6 +981,8 @@ class LocalExpensesCompanion extends UpdateCompanion<LocalExpenseRow> {
     this.businessName = const Value.absent(),
     this.documentType = const Value.absent(),
     this.documentNumber = const Value.absent(),
+    this.productId = const Value.absent(),
+    this.productName = const Value.absent(),
     this.expenseDate = const Value.absent(),
     this.subtotalCents = const Value.absent(),
     this.igvCents = const Value.absent(),
@@ -921,6 +1006,8 @@ class LocalExpensesCompanion extends UpdateCompanion<LocalExpenseRow> {
     this.businessName = const Value.absent(),
     this.documentType = const Value.absent(),
     this.documentNumber = const Value.absent(),
+    this.productId = const Value.absent(),
+    this.productName = const Value.absent(),
     this.expenseDate = const Value.absent(),
     required int subtotalCents,
     required int igvCents,
@@ -954,6 +1041,8 @@ class LocalExpensesCompanion extends UpdateCompanion<LocalExpenseRow> {
     Expression<String>? businessName,
     Expression<String>? documentType,
     Expression<String>? documentNumber,
+    Expression<int>? productId,
+    Expression<String>? productName,
     Expression<String>? expenseDate,
     Expression<int>? subtotalCents,
     Expression<int>? igvCents,
@@ -977,6 +1066,8 @@ class LocalExpensesCompanion extends UpdateCompanion<LocalExpenseRow> {
       if (businessName != null) 'business_name': businessName,
       if (documentType != null) 'document_type': documentType,
       if (documentNumber != null) 'document_number': documentNumber,
+      if (productId != null) 'product_id': productId,
+      if (productName != null) 'product_name': productName,
       if (expenseDate != null) 'expense_date': expenseDate,
       if (subtotalCents != null) 'subtotal_cents': subtotalCents,
       if (igvCents != null) 'igv_cents': igvCents,
@@ -1003,6 +1094,8 @@ class LocalExpensesCompanion extends UpdateCompanion<LocalExpenseRow> {
     Value<String>? businessName,
     Value<String>? documentType,
     Value<String>? documentNumber,
+    Value<int?>? productId,
+    Value<String?>? productName,
     Value<String>? expenseDate,
     Value<int>? subtotalCents,
     Value<int>? igvCents,
@@ -1026,6 +1119,8 @@ class LocalExpensesCompanion extends UpdateCompanion<LocalExpenseRow> {
       businessName: businessName ?? this.businessName,
       documentType: documentType ?? this.documentType,
       documentNumber: documentNumber ?? this.documentNumber,
+      productId: productId ?? this.productId,
+      productName: productName ?? this.productName,
       expenseDate: expenseDate ?? this.expenseDate,
       subtotalCents: subtotalCents ?? this.subtotalCents,
       igvCents: igvCents ?? this.igvCents,
@@ -1066,6 +1161,12 @@ class LocalExpensesCompanion extends UpdateCompanion<LocalExpenseRow> {
     }
     if (documentNumber.present) {
       map['document_number'] = Variable<String>(documentNumber.value);
+    }
+    if (productId.present) {
+      map['product_id'] = Variable<int>(productId.value);
+    }
+    if (productName.present) {
+      map['product_name'] = Variable<String>(productName.value);
     }
     if (expenseDate.present) {
       map['expense_date'] = Variable<String>(expenseDate.value);
@@ -1124,6 +1225,8 @@ class LocalExpensesCompanion extends UpdateCompanion<LocalExpenseRow> {
           ..write('businessName: $businessName, ')
           ..write('documentType: $documentType, ')
           ..write('documentNumber: $documentNumber, ')
+          ..write('productId: $productId, ')
+          ..write('productName: $productName, ')
           ..write('expenseDate: $expenseDate, ')
           ..write('subtotalCents: $subtotalCents, ')
           ..write('igvCents: $igvCents, ')
@@ -1163,6 +1266,8 @@ typedef $$LocalExpensesTableCreateCompanionBuilder =
       Value<String> businessName,
       Value<String> documentType,
       Value<String> documentNumber,
+      Value<int?> productId,
+      Value<String?> productName,
       Value<String> expenseDate,
       required int subtotalCents,
       required int igvCents,
@@ -1187,6 +1292,8 @@ typedef $$LocalExpensesTableUpdateCompanionBuilder =
       Value<String> businessName,
       Value<String> documentType,
       Value<String> documentNumber,
+      Value<int?> productId,
+      Value<String?> productName,
       Value<String> expenseDate,
       Value<int> subtotalCents,
       Value<int> igvCents,
@@ -1244,6 +1351,16 @@ class $$LocalExpensesTableFilterComposer
 
   ColumnFilters<String> get documentNumber => $composableBuilder(
     column: $table.documentNumber,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get productId => $composableBuilder(
+    column: $table.productId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get productName => $composableBuilder(
+    column: $table.productName,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -1357,6 +1474,16 @@ class $$LocalExpensesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get productId => $composableBuilder(
+    column: $table.productId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get productName => $composableBuilder(
+    column: $table.productName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get expenseDate => $composableBuilder(
     column: $table.expenseDate,
     builder: (column) => ColumnOrderings(column),
@@ -1461,6 +1588,14 @@ class $$LocalExpensesTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<int> get productId =>
+      $composableBuilder(column: $table.productId, builder: (column) => column);
+
+  GeneratedColumn<String> get productName => $composableBuilder(
+    column: $table.productName,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get expenseDate => $composableBuilder(
     column: $table.expenseDate,
     builder: (column) => column,
@@ -1561,6 +1696,8 @@ class $$LocalExpensesTableTableManager
                 Value<String> businessName = const Value.absent(),
                 Value<String> documentType = const Value.absent(),
                 Value<String> documentNumber = const Value.absent(),
+                Value<int?> productId = const Value.absent(),
+                Value<String?> productName = const Value.absent(),
                 Value<String> expenseDate = const Value.absent(),
                 Value<int> subtotalCents = const Value.absent(),
                 Value<int> igvCents = const Value.absent(),
@@ -1583,6 +1720,8 @@ class $$LocalExpensesTableTableManager
                 businessName: businessName,
                 documentType: documentType,
                 documentNumber: documentNumber,
+                productId: productId,
+                productName: productName,
                 expenseDate: expenseDate,
                 subtotalCents: subtotalCents,
                 igvCents: igvCents,
@@ -1607,6 +1746,8 @@ class $$LocalExpensesTableTableManager
                 Value<String> businessName = const Value.absent(),
                 Value<String> documentType = const Value.absent(),
                 Value<String> documentNumber = const Value.absent(),
+                Value<int?> productId = const Value.absent(),
+                Value<String?> productName = const Value.absent(),
                 Value<String> expenseDate = const Value.absent(),
                 required int subtotalCents,
                 required int igvCents,
@@ -1629,6 +1770,8 @@ class $$LocalExpensesTableTableManager
                 businessName: businessName,
                 documentType: documentType,
                 documentNumber: documentNumber,
+                productId: productId,
+                productName: productName,
                 expenseDate: expenseDate,
                 subtotalCents: subtotalCents,
                 igvCents: igvCents,

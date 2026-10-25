@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:oh_expenses_app/config/config.dart';
+import 'package:oh_expenses_app/features/config/domain/entities/expense_product.dart';
 import 'package:oh_expenses_app/features/expenses/domain/domain.dart';
 import 'package:oh_expenses_app/features/expenses/presentation/providers/expense_attachments_provider.dart';
 import 'package:oh_expenses_app/features/expenses/presentation/providers/expenses_provider.dart';
@@ -118,6 +119,16 @@ class _ExpenseDetailScreenState extends ConsumerState<ExpenseDetailScreen> {
                     : '${currentExpense.documentType} ${currentExpense.documentNumber}'
                           .trim(),
               ),
+              if (!currentExpense.isRemoteOnly &&
+                  currentExpense.productName?.trim().isNotEmpty == true) ...[
+                const Divider(height: 32, color: lineColor),
+                _DetailRow(
+                  label: 'Categoría',
+                  value: ExpenseProduct.normalizeName(
+                    currentExpense.productName!,
+                  ),
+                ),
+              ],
               const Divider(height: 32, color: lineColor),
               _DetailRow(
                 label: 'Fecha',

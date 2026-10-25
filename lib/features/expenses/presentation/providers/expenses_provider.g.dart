@@ -328,7 +328,7 @@ final class ExpenseSyncNotifierProvider
 }
 
 String _$expenseSyncNotifierHash() =>
-    r'4e3cc4107dd12bc128be027bf074059ea8b0cc95';
+    r'a15501faff20fd37c6cfdcd36176429d1142c273';
 
 abstract class _$ExpenseSyncNotifier extends $Notifier<ExpenseSyncState> {
   ExpenseSyncState build();

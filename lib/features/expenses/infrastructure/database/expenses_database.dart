@@ -12,6 +12,8 @@ class LocalExpenses extends Table {
   TextColumn get businessName => text().withDefault(const Constant(''))();
   TextColumn get documentType => text().withDefault(const Constant(''))();
   TextColumn get documentNumber => text().withDefault(const Constant(''))();
+  IntColumn get productId => integer().nullable()();
+  TextColumn get productName => text().nullable()();
   TextColumn get expenseDate => text().withDefault(const Constant(''))();
   IntColumn get subtotalCents => integer()();
   IntColumn get igvCents => integer()();
@@ -37,7 +39,17 @@ class ExpensesDatabase extends _$ExpensesDatabase {
   ExpensesDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+    onUpgrade: (m, from, to) async {
+      if (from < 2) {
+        await m.addColumn(localExpenses, localExpenses.productId);
+        await m.addColumn(localExpenses, localExpenses.productName);
+      }
+    },
+  );
 
   Stream<List<LocalExpenseRow>> watchExpenses(String accountScope) {
     final query = select(localExpenses)
